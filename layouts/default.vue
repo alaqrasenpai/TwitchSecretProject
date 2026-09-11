@@ -92,11 +92,6 @@ const { t, locale, toggleLocale, isRtl } = useTranslation();
 
         <!-- Right Quick Controls -->
         <div class="flex items-center gap-2.5">
-          <!-- Live Engine Badge (Small desktop only) -->
-          <div class="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-mono font-bold">
-            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <span>60FPS OBS ENGINE</span>
-          </div>
 
           <!-- Language Switcher -->
           <button
