@@ -105,14 +105,6 @@ function onModalConnect(platforms: { id: string; channel: string }[]) {
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
         <!-- Left: High-Impact Typography & Broadcaster Launchpad (7 cols) -->
         <div class="lg:col-span-7 space-y-7" :class="isRtl ? 'text-right' : 'text-left'">
-          <!-- Live Engine Badge -->
-          <div class="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-xl shadow-[0_0_25px_rgba(99,102,241,0.25)]">
-            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <span class="font-mono text-xs text-indigo-300 font-black tracking-wide uppercase">
-              {{ isRtl ? 'منظومة تفاعل البثوث المباشرة 2026' : 'NEXT-GEN BROADCAST GAMING ENGINE' }}
-            </span>
-          </div>
-
           <!-- Hero Editorial Headline -->
           <div class="space-y-3">
             <h1 class="font-cairo font-black text-4xl sm:text-5xl lg:text-6xl text-white tracking-tight leading-[1.18]">
