@@ -793,7 +793,7 @@ async function handleTriviaCategorySave(config: { categories: string[]; totalQue
           @click="toggleLocale"
         >
           <span>🌐</span>
-          <span>{{ locale === 'en' ? 'عربي' : 'EN' }}</span>
+          <span>{{ locale === 'en' ? 'Arabic' : 'EN' }}</span>
         </button>
 
         <!-- Audio Toggle -->

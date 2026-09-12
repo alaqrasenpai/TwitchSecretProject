@@ -823,6 +823,34 @@ export function formatGameLog(log: any, isRtlValue?: boolean): string {
     }
   }
 
+  if (!isArabic && log.message && /[\u0600-\u06FF]/.test(log.message)) {
+    if (log.message.includes('بطل') || log.message.includes('فاز')) {
+      return log.actor ? `👑 Champion! ${log.actor} won the match!` : '👑 Champion crowned!';
+    }
+    if (log.message.includes('انتهى السباق') || log.message.includes('صمد الجميع') || log.message.includes('انتهت اللعبة')) {
+      return '🏁 Game concluded! Great effort by all contenders!';
+    }
+    if (log.message.includes('قنبلة') || log.message.includes('انفجار') || log.message.includes('انفجرت')) {
+      return '💥 The bomb exploded!';
+    }
+    if (log.message.includes('تمرير') || log.message.includes('مرر')) {
+      return '💣 The bomb was passed!';
+    }
+    if (log.message.includes('أسرع') || log.message.includes('كتب')) {
+      return log.actor ? `⚡ ${log.actor} typed the fastest!` : '⚡ Round point awarded!';
+    }
+    if (log.message.includes('تخمين') || log.message.includes('كلمة') || log.message.includes('حزر')) {
+      return log.actor ? `🕵️ ${log.actor} solved the word!` : '🕵️ Word guessed!';
+    }
+    if (log.message.includes('إجابة') || log.message.includes('سؤال')) {
+      return log.actor ? `💡 ${log.actor} answered correctly!` : '💡 Correct answer!';
+    }
+    if (log.message.includes('اصطدم') || log.message.includes('عائق')) {
+      return log.actor ? `💥 ${log.actor} hit an obstacle!` : '💥 Obstacle collision!';
+    }
+    return '⚡ Live match event';
+  }
+
   return log.message || '';
 }
 

@@ -100,7 +100,7 @@ const { t, locale, toggleLocale, isRtl } = useTranslation();
             @click="toggleLocale"
           >
             <span>🌐</span>
-            <span>{{ locale === 'en' ? 'عربي' : 'English' }}</span>
+            <span>{{ locale === 'en' ? 'Arabic' : 'English' }}</span>
           </button>
 
           <!-- Audio Toggle -->

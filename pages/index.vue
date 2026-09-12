@@ -19,22 +19,49 @@ const errorModal = ref({
 
 // Live Interactive Demo State for Hero Screen
 const activeHeroDemo = ref<'SUBWAY' | 'WORDLE' | 'TYPERACE'>('SUBWAY');
-const simulatedChatFeed = ref([
-  { user: 'Sultan_99', text: 'jump ⬆️', time: 'الآن', color: 'text-cyan-400', badge: 'VIP' },
-  { user: 'Gamer_KSA', text: 'right ➡️', time: 'الآن', color: 'text-amber-400', badge: 'SUB' },
-  { user: 'Sara_Stream', text: 'فورتنايت 🎯', time: 'الآن', color: 'text-emerald-400', badge: 'MOD' },
-  { user: 'Fahad_Pro', text: 'left ⬅️', time: 'الآن', color: 'text-purple-400', badge: 'SUB' },
-  { user: 'Tariq_live', text: 'اسطورييي 🔥', time: 'الآن', color: 'text-indigo-400', badge: 'VIP' }
-]);
+
+function getDefaultChatFeed(arabic: boolean) {
+  if (arabic) {
+    return [
+      { user: 'Sultan_99', text: 'jump ⬆️', time: 'الآن', color: 'text-cyan-400', badge: 'VIP' },
+      { user: 'Gamer_KSA', text: 'right ➡️', time: 'الآن', color: 'text-amber-400', badge: 'SUB' },
+      { user: 'Sara_Stream', text: 'فورتنايت 🎯', time: 'الآن', color: 'text-emerald-400', badge: 'MOD' },
+      { user: 'Fahad_Pro', text: 'left ⬅️', time: 'الآن', color: 'text-purple-400', badge: 'SUB' },
+      { user: 'Tariq_live', text: 'اسطورييي 🔥', time: 'الآن', color: 'text-indigo-400', badge: 'VIP' }
+    ];
+  } else {
+    return [
+      { user: 'Legend_99', text: 'jump ⬆️', time: 'now', color: 'text-cyan-400', badge: 'VIP' },
+      { user: 'Gamer_KSA', text: 'right ➡️', time: 'now', color: 'text-amber-400', badge: 'SUB' },
+      { user: 'Sarah_Pro', text: 'FORTNITE 🎯', time: 'now', color: 'text-emerald-400', badge: 'MOD' },
+      { user: 'Shadow_07', text: 'left ⬅️', time: 'now', color: 'text-purple-400', badge: 'SUB' },
+      { user: 'Speedy_99', text: 'LEGENDARY 🔥', time: 'now', color: 'text-indigo-400', badge: 'VIP' }
+    ];
+  }
+}
+
+const simulatedChatFeed = ref(getDefaultChatFeed(isRtl.value));
+
+watch(isRtl, (newVal) => {
+  simulatedChatFeed.value = getDefaultChatFeed(newVal);
+});
 
 let chatCycleInterval: any = null;
 onMounted(() => {
+  simulatedChatFeed.value = getDefaultChatFeed(isRtl.value);
   chatCycleInterval = setInterval(() => {
-    const mockUsers = ['Rakan_X', 'Nora_Gaming', 'Speedy_07', 'DarkKnight', 'Legend_99', 'Meshari_Live'];
-    const mockMsgs = [
-      'jump ⬆️', 'duck ⬇️', 'right ➡️', 'left ⬅️',
-      'ماين كرافت', 'ميسي', 'رونالدو', 'سرعة خيالية!', 'فزت بالجولة 👑'
-    ];
+    const mockUsers = isRtl.value
+      ? ['Rakan_X', 'Nora_Gaming', 'Speedy_07', 'DarkKnight', 'Legend_99', 'Meshari_Live']
+      : ['Alex_Gaming', 'Speedy_07', 'DarkKnight', 'Legend_99', 'Nova_Prime', 'Apex_Hunter'];
+    const mockMsgs = isRtl.value
+      ? [
+          'jump ⬆️', 'duck ⬇️', 'right ➡️', 'left ⬅️',
+          'ماين كرافت', 'ميسي', 'رونالدو', 'سرعة خيالية!', 'فزت بالجولة 👑'
+        ]
+      : [
+          'jump ⬆️', 'duck ⬇️', 'right ➡️', 'left ⬅️',
+          'Minecraft', 'Messi', 'Ronaldo', 'Insane Speed!', 'Round Winner 👑'
+        ];
     const colors = ['text-cyan-400', 'text-amber-400', 'text-emerald-400', 'text-pink-400', 'text-indigo-400'];
     const randomUser = mockUsers[Math.floor(Math.random() * mockUsers.length)];
     const randomMsg = mockMsgs[Math.floor(Math.random() * mockMsgs.length)];
@@ -43,7 +70,7 @@ onMounted(() => {
     simulatedChatFeed.value.unshift({
       user: randomUser,
       text: randomMsg,
-      time: 'الآن',
+      time: isRtl.value ? 'الآن' : 'now',
       color: randomColor,
       badge: Math.random() > 0.5 ? 'SUB' : 'VIP'
     });
@@ -229,7 +256,7 @@ function onModalConnect(platforms: { id: string; channel: string }[]) {
                 ]"
                 @click="activeHeroDemo = 'SUBWAY'"
               >
-                🏃‍♂️ الهروب السريع
+                🏃‍♂️ {{ isRtl ? 'الهروب السريع' : 'Subway Run' }}
               </button>
               <button
                 type="button"
@@ -239,7 +266,7 @@ function onModalConnect(platforms: { id: string; channel: string }[]) {
                 ]"
                 @click="activeHeroDemo = 'WORDLE'"
               >
-                🔤 الكلمة المخفية
+                🔤 {{ isRtl ? 'الكلمة المخفية' : 'Secret Word' }}
               </button>
               <button
                 type="button"
@@ -249,7 +276,7 @@ function onModalConnect(platforms: { id: string; channel: string }[]) {
                 ]"
                 @click="activeHeroDemo = 'TYPERACE'"
               >
-                ⌨️ سرعة الكتابة
+                ⌨️ {{ isRtl ? 'سرعة الكتابة' : 'Type Race' }}
               </button>
             </div>
 
@@ -261,7 +288,9 @@ function onModalConnect(platforms: { id: string; channel: string }[]) {
               <!-- Active Game Demo 1: Subway Runner -->
               <div v-if="activeHeroDemo === 'SUBWAY'" class="relative z-10 h-full flex flex-col justify-between">
                 <div class="flex items-center justify-between text-[11px] font-mono">
-                  <span class="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/40">⚡ الجولة 2/5 • السرعة 1.4x</span>
+                  <span class="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/40">
+                    {{ isRtl ? '⚡ الجولة 2/5 • السرعة 1.4x' : '⚡ Round 2/5 • Speed 1.4x' }}
+                  </span>
                   <span class="text-amber-300 font-bold">⏱️ 02.4s</span>
                 </div>
 
@@ -269,7 +298,7 @@ function onModalConnect(platforms: { id: string; channel: string }[]) {
                 <div class="grid grid-cols-3 gap-2 my-auto px-2">
                   <div class="h-20 rounded-xl bg-white/5 border border-white/10 flex flex-col items-center justify-center text-slate-500 text-xs font-cairo">
                     <span class="text-lg">🛤️</span>
-                    <span class="text-[10px]">اليسار</span>
+                    <span class="text-[10px]">{{ isRtl ? 'اليسار' : 'Left' }}</span>
                   </div>
                   <!-- Middle lane with Obstacle & Jumping Runner -->
                   <div class="h-20 rounded-xl bg-cyan-500/15 border-2 border-cyan-400 flex flex-col items-center justify-center relative shadow-[0_0_20px_rgba(6,182,212,0.4)]">
@@ -278,7 +307,7 @@ function onModalConnect(platforms: { id: string; channel: string }[]) {
                   </div>
                   <div class="h-20 rounded-xl bg-red-500/20 border border-red-500/40 flex flex-col items-center justify-center text-red-300 text-xs font-cairo">
                     <span class="text-xl">🚧</span>
-                    <span class="text-[10px] font-bold">حاجز</span>
+                    <span class="text-[10px] font-bold">{{ isRtl ? 'حاجز' : 'Obstacle' }}</span>
                   </div>
                 </div>
 
@@ -290,18 +319,30 @@ function onModalConnect(platforms: { id: string; channel: string }[]) {
               <!-- Active Game Demo 2: Wordle / Hangman -->
               <div v-else-if="activeHeroDemo === 'WORDLE'" class="relative z-10 h-full flex flex-col justify-between">
                 <div class="flex items-center justify-between text-[11px] font-mono">
-                  <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40">🏆 الجولة 1/5 • التصنيف: ألعاب</span>
+                  <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40">
+                    {{ isRtl ? '🏆 الجولة 1/5 • التصنيف: ألعاب' : '🏆 Round 1/5 • Category: Gaming' }}
+                  </span>
                   <span class="text-emerald-300 font-bold">⏱️ 38s</span>
                 </div>
 
                 <!-- Letter Tiles -->
                 <div class="flex items-center justify-center gap-1.5 my-auto">
-                  <span class="w-9 h-11 rounded-xl bg-emerald-600 border border-emerald-300 text-white font-black text-xl flex items-center justify-center shadow-[0_0_12px_rgba(16,185,129,0.7)]">ف</span>
-                  <span class="w-9 h-11 rounded-xl bg-emerald-600 border border-emerald-300 text-white font-black text-xl flex items-center justify-center shadow-[0_0_12px_rgba(16,185,129,0.7)]">و</span>
-                  <span class="w-9 h-11 rounded-xl bg-neutral-900 border border-white/20 text-slate-500 font-black text-xl flex items-center justify-center">?</span>
-                  <span class="w-9 h-11 rounded-xl bg-amber-500 border border-amber-300 text-black font-black text-xl flex items-center justify-center shadow-[0_0_12px_rgba(245,158,11,0.7)]">ت</span>
-                  <span class="w-9 h-11 rounded-xl bg-neutral-900 border border-white/20 text-slate-500 font-black text-xl flex items-center justify-center">?</span>
-                  <span class="w-9 h-11 rounded-xl bg-emerald-600 border border-emerald-300 text-white font-black text-xl flex items-center justify-center shadow-[0_0_12px_rgba(16,185,129,0.7)]">ت</span>
+                  <template v-if="isRtl">
+                    <span class="w-9 h-11 rounded-xl bg-emerald-600 border border-emerald-300 text-white font-black text-xl flex items-center justify-center shadow-[0_0_12px_rgba(16,185,129,0.7)]">ف</span>
+                    <span class="w-9 h-11 rounded-xl bg-emerald-600 border border-emerald-300 text-white font-black text-xl flex items-center justify-center shadow-[0_0_12px_rgba(16,185,129,0.7)]">و</span>
+                    <span class="w-9 h-11 rounded-xl bg-neutral-900 border border-white/20 text-slate-500 font-black text-xl flex items-center justify-center">?</span>
+                    <span class="w-9 h-11 rounded-xl bg-amber-500 border border-amber-300 text-black font-black text-xl flex items-center justify-center shadow-[0_0_12px_rgba(245,158,11,0.7)]">ت</span>
+                    <span class="w-9 h-11 rounded-xl bg-neutral-900 border border-white/20 text-slate-500 font-black text-xl flex items-center justify-center">?</span>
+                    <span class="w-9 h-11 rounded-xl bg-emerald-600 border border-emerald-300 text-white font-black text-xl flex items-center justify-center shadow-[0_0_12px_rgba(16,185,129,0.7)]">ت</span>
+                  </template>
+                  <template v-else>
+                    <span class="w-9 h-11 rounded-xl bg-emerald-600 border border-emerald-300 text-white font-black text-xl flex items-center justify-center shadow-[0_0_12px_rgba(16,185,129,0.7)]">G</span>
+                    <span class="w-9 h-11 rounded-xl bg-emerald-600 border border-emerald-300 text-white font-black text-xl flex items-center justify-center shadow-[0_0_12px_rgba(16,185,129,0.7)]">A</span>
+                    <span class="w-9 h-11 rounded-xl bg-neutral-900 border border-white/20 text-slate-500 font-black text-xl flex items-center justify-center">?</span>
+                    <span class="w-9 h-11 rounded-xl bg-amber-500 border border-amber-300 text-black font-black text-xl flex items-center justify-center shadow-[0_0_12px_rgba(245,158,11,0.7)]">E</span>
+                    <span class="w-9 h-11 rounded-xl bg-neutral-900 border border-white/20 text-slate-500 font-black text-xl flex items-center justify-center">?</span>
+                    <span class="w-9 h-11 rounded-xl bg-emerald-600 border border-emerald-300 text-white font-black text-xl flex items-center justify-center shadow-[0_0_12px_rgba(16,185,129,0.7)]">S</span>
+                  </template>
                 </div>
 
                 <div class="text-center text-[10px] font-tajawal text-emerald-300 font-bold">
@@ -312,14 +353,18 @@ function onModalConnect(platforms: { id: string; channel: string }[]) {
               <!-- Active Game Demo 3: Type Race -->
               <div v-else class="relative z-10 h-full flex flex-col justify-between">
                 <div class="flex items-center justify-between text-[11px] font-mono">
-                  <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40">⚡ الجولة 3/7 • سرعة الكتابة</span>
+                  <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40">
+                    {{ isRtl ? '⚡ الجولة 3/7 • سرعة الكتابة' : '⚡ Round 3/7 • Type Race' }}
+                  </span>
                   <span class="text-amber-300 font-bold">⏱️ 08s</span>
                 </div>
 
                 <div class="my-auto text-center space-y-1">
-                  <div class="text-xs font-cairo text-amber-300 font-bold">اكتب الكلمة بأسرع ما يمكن:</div>
+                  <div class="text-xs font-cairo text-amber-300 font-bold">
+                    {{ isRtl ? 'اكتب الكلمة بأسرع ما يمكن:' : 'Type the word as fast as you can:' }}
+                  </div>
                   <div class="font-cairo font-black text-3xl text-white tracking-widest bg-white/5 py-2 rounded-2xl border border-amber-500/30">
-                    أسطورة
+                    {{ isRtl ? 'أسطورة' : 'LEGEND' }}
                   </div>
                 </div>
 
@@ -422,22 +467,22 @@ function onModalConnect(platforms: { id: string; channel: string }[]) {
               <div class="p-2.5 rounded-xl bg-black/40 border border-cyan-500/20 text-center space-y-1">
                 <div class="text-sm">⬆️</div>
                 <div class="font-mono text-[10px] text-cyan-300 font-bold">jump</div>
-                <div class="text-[9px] text-slate-400 font-tajawal">قفز فوق الحاجز</div>
+                <div class="text-[9px] text-slate-400 font-tajawal">{{ isRtl ? 'قفز فوق الحاجز' : 'Jump over barrier' }}</div>
               </div>
               <div class="p-2.5 rounded-xl bg-black/40 border border-cyan-500/20 text-center space-y-1">
                 <div class="text-sm">⬇️</div>
                 <div class="font-mono text-[10px] text-cyan-300 font-bold">duck</div>
-                <div class="text-[9px] text-slate-400 font-tajawal">انحناء تحت العائق</div>
+                <div class="text-[9px] text-slate-400 font-tajawal">{{ isRtl ? 'انحناء تحت العائق' : 'Duck under obstacle' }}</div>
               </div>
               <div class="p-2.5 rounded-xl bg-black/40 border border-cyan-500/20 text-center space-y-1">
                 <div class="text-sm">⬅️</div>
                 <div class="font-mono text-[10px] text-cyan-300 font-bold">left</div>
-                <div class="text-[9px] text-slate-400 font-tajawal">المسار الأيسر</div>
+                <div class="text-[9px] text-slate-400 font-tajawal">{{ isRtl ? 'المسار الأيسر' : 'Left lane' }}</div>
               </div>
               <div class="p-2.5 rounded-xl bg-black/40 border border-cyan-500/20 text-center space-y-1">
                 <div class="text-sm">➡️</div>
                 <div class="font-mono text-[10px] text-cyan-300 font-bold">right</div>
-                <div class="text-[9px] text-slate-400 font-tajawal">المسار الأيمن</div>
+                <div class="text-[9px] text-slate-400 font-tajawal">{{ isRtl ? 'المسار الأيمن' : 'Right lane' }}</div>
               </div>
             </div>
           </div>
@@ -483,11 +528,20 @@ function onModalConnect(platforms: { id: string; channel: string }[]) {
 
             <!-- Letter Clues Visual -->
             <div class="flex items-center justify-center gap-1.5 p-3 bg-black/50 rounded-2xl border border-emerald-500/20">
-              <span class="w-7 h-8 rounded-lg bg-emerald-600 text-white font-black text-sm flex items-center justify-center">ف</span>
-              <span class="w-7 h-8 rounded-lg bg-emerald-600 text-white font-black text-sm flex items-center justify-center">و</span>
-              <span class="w-7 h-8 rounded-lg bg-amber-500 text-black font-black text-sm flex items-center justify-center">ر</span>
-              <span class="w-7 h-8 rounded-lg bg-neutral-800 text-slate-400 font-black text-sm flex items-center justify-center">ت</span>
-              <span class="w-7 h-8 rounded-lg bg-emerald-600 text-white font-black text-sm flex items-center justify-center">!</span>
+              <template v-if="isRtl">
+                <span class="w-7 h-8 rounded-lg bg-emerald-600 text-white font-black text-sm flex items-center justify-center">ف</span>
+                <span class="w-7 h-8 rounded-lg bg-emerald-600 text-white font-black text-sm flex items-center justify-center">و</span>
+                <span class="w-7 h-8 rounded-lg bg-amber-500 text-black font-black text-sm flex items-center justify-center">ر</span>
+                <span class="w-7 h-8 rounded-lg bg-neutral-800 text-slate-400 font-black text-sm flex items-center justify-center">ت</span>
+                <span class="w-7 h-8 rounded-lg bg-emerald-600 text-white font-black text-sm flex items-center justify-center">!</span>
+              </template>
+              <template v-else>
+                <span class="w-7 h-8 rounded-lg bg-emerald-600 text-white font-black text-sm flex items-center justify-center">G</span>
+                <span class="w-7 h-8 rounded-lg bg-emerald-600 text-white font-black text-sm flex items-center justify-center">A</span>
+                <span class="w-7 h-8 rounded-lg bg-amber-500 text-black font-black text-sm flex items-center justify-center">M</span>
+                <span class="w-7 h-8 rounded-lg bg-neutral-800 text-slate-400 font-black text-sm flex items-center justify-center">E</span>
+                <span class="w-7 h-8 rounded-lg bg-emerald-600 text-white font-black text-sm flex items-center justify-center">R</span>
+              </template>
             </div>
           </div>
 
