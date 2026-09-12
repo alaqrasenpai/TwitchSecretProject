@@ -79,7 +79,7 @@ async function copyCode() {
           {{ t('broadcasterVerifiedNotice') }}
         </div>
         <p class="font-tajawal text-xs text-neutral-300 max-w-sm mx-auto">
-          You have full control over the match room, game settings, and Twitch chat integration.
+          {{ isRtl ? 'تملك الآن كامل الصلاحيات للتحكم بالغرفة والإعدادات وتفاعل شات البث.' : 'You have full control over the match room, game settings, and Twitch chat integration.' }}
         </p>
         <div class="pt-2">
           <GamerButton size="sm" variant="primary" rounded="full" class="px-6" @click="$emit('close')">
@@ -119,8 +119,12 @@ async function copyCode() {
         </div>
 
         <div class="p-3 bg-neutral-950/60 rounded-xl border border-arena-border/60 text-[11px] font-tajawal text-arena-textMuted space-y-1">
-          <div class="font-bold text-amber-200">💡 كيف تعمل ميزة التوثيق عبر الشات؟</div>
-          <div>بمجرد كتابة الأمر في شات قناتك من حسابك، يتعرف نظام اللعبة فورياً على شارة صاحب القناة (Broadcaster) ويتم توثيق الغرفة في ثوانٍ معدودة.</div>
+          <div class="font-bold text-amber-200">
+            {{ isRtl ? '💡 كيف تعمل ميزة التوثيق عبر الشات؟' : '💡 How does chat verification work?' }}
+          </div>
+          <div>
+            {{ isRtl ? 'بمجرد كتابة الأمر في شات قناتك من حسابك، يتعرف نظام اللعبة فورياً على شارة صاحب القناة (Broadcaster) ويتم توثيق الغرفة في ثوانٍ معدودة.' : 'Once you type the command into your channel chat from your account, the game system instantly detects your Broadcaster badge and verifies the room in seconds.' }}
+          </div>
         </div>
       </div>
     </div>
