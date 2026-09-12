@@ -524,6 +524,22 @@ function promptResetGame() {
   }
 }
 
+function promptStartNewGame() {
+  openConfirm({
+    title: isRtl.value ? 'بدء لعبة جديدة وحذف الحالية' : 'Start New Game & Delete Current',
+    message: isRtl.value
+      ? 'هل ترغب في إنهاء وحذف اللعبة الحالية والعودة لاختيار وبدء لعبة جديدة؟'
+      : 'Do you want to terminate and delete the current game and return to choose a new game?',
+    confirmText: isRtl.value ? 'نعم، بدء لعبة جديدة' : 'Yes, Start New Game',
+    cancelText: isRtl.value ? 'البقاء في اللعبة' : 'Stay in Game',
+    variant: 'danger',
+    onConfirm: async () => {
+      await gameStore.deleteCurrentSession();
+      navigateTo('/dashboard');
+    }
+  });
+}
+
 async function handleTriviaCategorySave(config: { categories: string[]; totalQuestions: number; timeLimitSeconds: number; triviaLanguage?: 'AR' | 'EN' | 'BOTH' }) {
   await gameStore.performAction('UPDATE_SETTINGS', {
     settings: {
@@ -780,10 +796,20 @@ async function handleTriviaCategorySave(config: { categories: string[]; totalQue
         <!-- Reset -->
         <button
           type="button"
-          class="px-2.5 py-1 bg-arena-dark hover:bg-red-950/60 border border-arena-border text-xs font-cairo font-bold text-red-400 rounded-full transition-colors"
+          class="px-2.5 py-1 bg-arena-dark hover:bg-red-950/60 border border-arena-border text-xs font-cairo font-bold text-red-400 rounded-full transition-colors cursor-pointer"
           @click="promptResetGame"
         >
           {{ t('resetGameBtn') }}
+        </button>
+
+        <!-- New Game / Switch Game -->
+        <button
+          type="button"
+          class="px-2.5 py-1 bg-indigo-950/80 hover:bg-indigo-900/80 border border-indigo-500/50 text-xs font-cairo font-bold text-indigo-300 hover:text-white rounded-full transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+          @click="promptStartNewGame"
+        >
+          <span>🎮</span>
+          <span>{{ isRtl ? 'لعبة جديدة' : 'New Game' }}</span>
         </button>
 
         <!-- Language Switcher -->

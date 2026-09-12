@@ -187,6 +187,17 @@ export const useGameStore = defineStore('game', () => {
     saveToLocalStorage(null);
   }
 
+  async function deleteCurrentSession() {
+    if (currentSession.value?.sessionId) {
+      try {
+        await $fetch(`/api/games/${currentSession.value.sessionId}`, {
+          method: 'DELETE'
+        }).catch(() => {});
+      } catch (e) {}
+    }
+    clearStoredSession();
+  }
+
   return {
     currentSession,
     loading,
@@ -205,6 +216,7 @@ export const useGameStore = defineStore('game', () => {
     addPlayer,
     setSessionDirectly,
     clearStoredSession,
+    deleteCurrentSession,
     getFromLocalStorage
   };
 });

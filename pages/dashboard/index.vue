@@ -19,6 +19,12 @@ const errorModal = ref({
   isOpen: false,
   message: ''
 });
+const confirmNewGameModal = ref({
+  isOpen: false,
+  targetGameType: '',
+  activeSessionGameTitle: '',
+  activeSessionId: ''
+});
 
 watch(
   () => route.query.type,
@@ -47,6 +53,12 @@ watch(
 onMounted(() => {
   if (route.query.channel) {
     streamerChannel.value = String(route.query.channel).trim();
+  } else if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('chatwar_streamer_channel') || localStorage.getItem('twitch_channel');
+    if (saved) streamerChannel.value = saved.trim();
+  }
+  if (!streamerChannel.value && gameStore.currentSession?.streamerUsername && gameStore.currentSession.streamerUsername !== 'streamer') {
+    streamerChannel.value = gameStore.currentSession.streamerUsername;
   }
   if (route.query.platform && ['twitch', 'kick', 'tiktok'].includes(String(route.query.platform))) {
     selectedPlatform.value = String(route.query.platform) as any;
@@ -55,6 +67,14 @@ onMounted(() => {
     activeFilter.value = 'MINI';
   } else if (route.query.category) {
     activeFilter.value = String(route.query.category).toUpperCase() as any;
+  }
+
+  // If navigated with a gameType query parameter (e.g. from Home page quick launch)
+  if (route.query.gameType) {
+    const requested = String(route.query.gameType).toUpperCase();
+    if (requested) {
+      launchGameRoom(requested);
+    }
   }
 });
 
@@ -218,6 +238,20 @@ const filteredGames = computed(() => {
   return gamesList.value.filter((g) => g.category === activeFilter.value);
 });
 
+function getGameTitle(type: string) {
+  const found = gamesList.value.find((g) => g.id === type);
+  if (found) return found.title;
+  if (type === 'SUBWAY_RUNNER') return isRtl.value ? 'مسار الهروب السريع' : 'Subway Runner';
+  if (type === 'TRIVIA') return isRtl.value ? 'مسابقة الأسئلة' : 'Trivia Quiz';
+  if (type === 'TYPE_RACE') return isRtl.value ? 'سرعة الكتابة' : 'Type Race';
+  if (type === 'HANGMAN') return isRtl.value ? 'الكلمة المخفية' : 'Secret Word';
+  if (type === 'HOT_POTATO') return isRtl.value ? 'القنبلة الموقوتة' : 'Hot Potato';
+  if (type === 'GRID_ROYALE') return isRtl.value ? 'حلبة البقاء' : 'Grid Royale';
+  if (type === 'ROULETTE') return isRtl.value ? 'روليت الاستبعاد' : 'Stream Roulette';
+  if (type === 'BOARD_PARTY') return isRtl.value ? 'حرب المتاهة' : 'Pummel Maze War';
+  return type;
+}
+
 function getGameLaunchText(gameId: string) {
   if (gameId === 'TRIVIA') return isRtl.value ? 'بدء مسابقة الأسئلة 🧠' : 'Launch Trivia Quiz 🧠';
   if (gameId === 'GRID_ROYALE') return isRtl.value ? 'بدء حلبة البقاء ⚡' : 'Launch Grid Royale ⚡';
@@ -232,9 +266,15 @@ function getGameLaunchText(gameId: string) {
 async function executeCreateSession(gameType: string, channel: string) {
   isCreating.value = true;
   try {
-    const session = await gameStore.createNewSession(gameType, channel);
-    if (session) {
+    const cleanChannel = channel.trim() || 'streamer';
+    if (typeof window !== 'undefined' && cleanChannel !== 'streamer') {
+      localStorage.setItem('chatwar_streamer_channel', cleanChannel);
+    }
+    const session = await gameStore.createNewSession(gameType, cleanChannel);
+    if (session && session.sessionId) {
       navigateTo(`/dashboard/room/${session.sessionId}`);
+    } else {
+      throw new Error('Failed to create session');
     }
   } catch (e) {
     errorModal.value = {
@@ -248,6 +288,40 @@ async function executeCreateSession(gameType: string, channel: string) {
 
 function launchGameRoom(gameType: string) {
   pendingGameType.value = gameType;
+
+  // Retrieve channel if empty
+  if (!streamerChannel.value.trim()) {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('chatwar_streamer_channel') || localStorage.getItem('twitch_channel');
+      if (saved) streamerChannel.value = saved.trim();
+    }
+    if (!streamerChannel.value && gameStore.currentSession?.streamerUsername && gameStore.currentSession.streamerUsername !== 'streamer') {
+      streamerChannel.value = gameStore.currentSession.streamerUsername;
+    }
+  }
+
+  // Check if there is an active session already running
+  const existing = gameStore.currentSession || gameStore.getFromLocalStorage();
+  const isExistingActive = !!(
+    existing &&
+    existing.sessionId &&
+    existing.status !== 'FINISHED'
+  );
+
+  if (isExistingActive && existing) {
+    confirmNewGameModal.value = {
+      isOpen: true,
+      targetGameType: gameType,
+      activeSessionGameTitle: getGameTitle(existing.gameType),
+      activeSessionId: existing.sessionId
+    };
+    return;
+  }
+
+  proceedToStartGame(gameType);
+}
+
+function proceedToStartGame(gameType: string) {
   if (!streamerChannel.value.trim()) {
     showPlatformModal.value = true;
     return;
@@ -255,13 +329,53 @@ function launchGameRoom(gameType: string) {
   executeCreateSession(gameType, streamerChannel.value.trim());
 }
 
+async function confirmStartNewAndDeleteOld() {
+  const targetType = confirmNewGameModal.value.targetGameType || pendingGameType.value;
+  confirmNewGameModal.value.isOpen = false;
+
+  // Delete previous game session completely
+  await gameStore.deleteCurrentSession();
+
+  // Start the new game
+  const channel = streamerChannel.value.trim() || 'streamer';
+  await executeCreateSession(targetType, channel);
+}
+
+function resumeExistingGame() {
+  const existingId = confirmNewGameModal.value.activeSessionId;
+  confirmNewGameModal.value.isOpen = false;
+  if (existingId) {
+    navigateTo(`/dashboard/room/${existingId}`);
+  }
+}
+
+function cancelNewGamePrompt() {
+  confirmNewGameModal.value.isOpen = false;
+}
+
 function onModalConnect(platforms: { id: string; channel: string }[]) {
   const chosen = platforms.find((p) => p.channel.trim());
   if (chosen) {
     streamerChannel.value = chosen.channel.trim();
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('chatwar_streamer_channel', chosen.channel.trim());
+    }
     if (['twitch', 'kick', 'tiktok'].includes(chosen.id)) {
       selectedPlatform.value = chosen.id as any;
     }
+
+    // Check if there is an active session before creating
+    const existing = gameStore.currentSession || gameStore.getFromLocalStorage();
+    if (existing && existing.sessionId && existing.status !== 'FINISHED') {
+      confirmNewGameModal.value = {
+        isOpen: true,
+        targetGameType: pendingGameType.value,
+        activeSessionGameTitle: getGameTitle(existing.gameType),
+        activeSessionId: existing.sessionId
+      };
+      return;
+    }
+
     executeCreateSession(pendingGameType.value, chosen.channel.trim());
   }
 }
@@ -592,6 +706,80 @@ function onModalConnect(platforms: { id: string; channel: string }[]) {
         >
           <span>🔒 {{ t('underDevelopment') }}</span>
         </button>
+      </div>
+    </div>
+
+    <!-- Active Game Exists Confirmation Dialog -->
+    <div
+      v-if="confirmNewGameModal.isOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in"
+      @click.self="cancelNewGamePrompt"
+    >
+      <div
+        :class="[
+          'relative w-full max-w-lg bg-[#0e111a] border-2 border-amber-500/60 rounded-3xl shadow-[0_0_50px_rgba(245,158,11,0.3)] p-6 sm:p-7 space-y-6 animate-scale-up',
+          isRtl ? 'text-right' : 'text-left'
+        ]"
+      >
+        <!-- Header -->
+        <div class="flex items-center gap-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-amber-950/80 border border-amber-500/50 text-amber-300 flex items-center justify-center text-2xl shrink-0 shadow-lg animate-pulse">
+            ⚠️
+          </div>
+          <div>
+            <h3 class="font-cairo font-black text-xl text-white">
+              {{ isRtl ? 'توجد لعبة أخرى بدأت بالفعل' : 'Another Game is Already Started' }}
+            </h3>
+            <p class="text-xs font-tajawal text-slate-400 mt-0.5">
+              {{ isRtl ? `اللعبة السابقة: ${confirmNewGameModal.activeSessionGameTitle}` : `Previous Game: ${confirmNewGameModal.activeSessionGameTitle}` }}
+            </p>
+          </div>
+        </div>
+
+        <!-- Message Body -->
+        <div class="p-4 bg-[#141824] rounded-2xl border border-[#27314a] space-y-2">
+          <p class="font-tajawal text-sm text-slate-200 leading-relaxed">
+            {{
+              isRtl
+                ? `هناك لعبة (${confirmNewGameModal.activeSessionGameTitle}) قيد التشغيل حالياً. هل ترغب في بدء لعبة جديدة وحذف القديمة؟`
+                : `A game session for (${confirmNewGameModal.activeSessionGameTitle}) is currently running. Do you want to start a new game and delete the old one?`
+            }}
+          </p>
+          <p class="font-tajawal text-xs text-amber-300/80">
+            {{
+              isRtl
+                ? 'ملاحظة: بدء لعبة جديدة سيقوم بإنهاء وحذف بيانات الجولة السابقة بالكامل.'
+                : 'Note: Starting a new game will permanently terminate and remove the previous match.'
+            }}
+          </p>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex flex-col sm:flex-row items-center justify-end gap-3 pt-1">
+          <button
+            type="button"
+            class="w-full sm:w-auto px-5 py-2.5 rounded-full bg-[#141824] hover:bg-[#1a2030] border border-[#27314a] text-xs font-cairo font-bold text-slate-300 hover:text-white transition-colors cursor-pointer"
+            @click="cancelNewGamePrompt"
+          >
+            {{ isRtl ? 'إلغاء' : 'Cancel' }}
+          </button>
+
+          <button
+            type="button"
+            class="w-full sm:w-auto px-5 py-2.5 rounded-full bg-emerald-950/80 hover:bg-emerald-900/80 border border-emerald-500/50 text-xs font-cairo font-bold text-emerald-300 hover:text-white transition-colors cursor-pointer"
+            @click="resumeExistingGame"
+          >
+            {{ isRtl ? 'متابعة اللعبة السابقة ↗️' : 'Resume Previous Game ↗️' }}
+          </button>
+
+          <button
+            type="button"
+            class="w-full sm:w-auto px-6 py-2.5 rounded-full text-xs font-cairo font-black text-white bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 shadow-lg shadow-rose-900/50 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+            @click="confirmStartNewAndDeleteOld"
+          >
+            {{ isRtl ? 'بدء لعبة جديدة وحذف القديمة 🚀' : 'Start New & Delete Old 🚀' }}
+          </button>
+        </div>
       </div>
     </div>
 

@@ -92,6 +92,17 @@ export async function getGameSession(sessionId: string): Promise<IGameSession | 
   return activeRooms.get(sessionId) || null;
 }
 
+export function deleteGameSession(sessionId: string): boolean {
+  const session = activeRooms.get(sessionId);
+  if (session?.overlayToken) {
+    overlayToSessionMap.delete(session.overlayToken);
+  }
+  broadcastGameEvent(sessionId, 'SESSION_DELETED', { sessionId });
+  activeRooms.delete(sessionId);
+  sessionListeners.delete(sessionId);
+  return true;
+}
+
 export function sanitizeSessionForViewer(session: IGameSession): IGameSession {
   if (session.gameType !== 'HANGMAN' || !session.hangmanState) {
     return session;
