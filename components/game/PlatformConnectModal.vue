@@ -81,6 +81,20 @@ watch(
   { immediate: true }
 );
 
+watch(
+  () => [props.isOpen, props.initialChannel],
+  ([open, initChan]) => {
+    const saved = typeof window !== 'undefined'
+      ? (localStorage.getItem('chatwar_streamer_channel') || localStorage.getItem('twitch_channel') || '')
+      : '';
+    const preferred = (initChan as string) || saved;
+    if (preferred && platforms.value[0] && (!platforms.value[0].channelName || open)) {
+      platforms.value[0].channelName = preferred;
+    }
+  },
+  { immediate: true }
+);
+
 function togglePlatform(plat: PlatformConfig) {
   plat.selected = !plat.selected;
   validationError.value = '';
@@ -96,6 +110,12 @@ function handleConnect() {
       ? 'يرجى تفعيل منصة واحدة على الأقل وإدخال اسم القناة'
       : 'Please enable at least one platform and enter your channel name';
     return;
+  }
+
+  const twitchPlat = activeSelected.find((p) => p.id === 'twitch');
+  if (twitchPlat && twitchPlat.channel && typeof window !== 'undefined') {
+    localStorage.setItem('chatwar_streamer_channel', twitchPlat.channel);
+    localStorage.setItem('twitch_channel', twitchPlat.channel);
   }
 
   validationError.value = '';

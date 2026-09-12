@@ -114,6 +114,18 @@ const topPlayers = computed<IPlayer[]>(() => {
     .slice(0, 5);
 });
 
+const allRankedPlayers = computed<IPlayer[]>(() => {
+  return [...(props.session?.players || [])].sort((a, b) => {
+    const scoreA = a.score || 0;
+    const scoreB = b.score || 0;
+    if (scoreB !== scoreA) return scoreB - scoreA;
+    const correctA = a.correctAnswersCount || 0;
+    const correctB = b.correctAnswersCount || 0;
+    if (correctB !== correctA) return correctB - correctA;
+    return (a.number || 0) - (b.number || 0);
+  });
+});
+
 const optionLetters = ['A', 'B', 'C', 'D'];
 const optionNumbers = ['1', '2', '3', '4'];
 const optionColorThemes = [
@@ -414,30 +426,111 @@ function onQuestionTimerTimeout() {
         </div>
       </div>
 
-      <!-- ROUND SUMMARY / WINNER BANNER -->
+      <!-- GRAND SCOREBOARD / FINISHED SCREEN -->
       <div
         v-if="isFinished"
-        class="bg-gradient-to-r from-amber-500/20 via-primary-500/20 to-purple-500/20 border-2 border-amber-400/40 rounded-3xl p-8 text-center shadow-2xl animate-bounce-short"
+        class="w-full max-w-2xl mx-auto p-5 sm:p-7 bg-gradient-to-b from-dark-950 via-slate-900/98 to-dark-950 border-2 border-amber-400/80 rounded-3xl shadow-[0_0_60px_rgba(245,158,11,0.4)] backdrop-blur-xl animate-scale-up space-y-4 text-center"
       >
-        <div class="text-5xl mb-3">👑</div>
-        <h3 class="text-2xl sm:text-3xl font-black text-white mb-2">
-          {{ isRtl ? 'اكتملت مسابقة الأسئلة!' : 'Quiz Arena Completed!' }}
-        </h3>
-        <p v-if="session.winner" class="text-amber-300 text-lg font-bold mb-4">
-          {{ isRtl ? 'البطل الفائز بالمركز الأول:' : 'First Place Champion:' }} 
-          <span class="text-white underline decoration-amber-400 underline-offset-4">{{ session.winner.displayName }}</span>
-          {{ isRtl ? 'بمجموع' : 'with' }} <span class="font-mono text-amber-400">{{ session.winner.score || 0 }}</span> {{ isRtl ? 'نقطة! 🎉' : 'points! 🎉' }}
-        </p>
-        <p v-else class="text-dark-300 text-sm">
-          {{ isRtl ? 'شكراً لجميع المشاركين على الحماس!' : 'Thanks to all contenders for playing!' }}
-        </p>
+        <div class="inline-flex items-center gap-2 px-4 py-1 bg-amber-500/20 text-amber-300 border border-amber-400/50 rounded-full text-xs font-cairo font-black uppercase tracking-wider shadow-glow-gold">
+          🏆 {{ isRtl ? 'لوحة الشرف والترتيب النهائي (SCOREBOARD)' : 'FINAL TRIVIA SCOREBOARD' }}
+        </div>
 
-        <div v-if="isAdmin" class="mt-5">
+        <!-- Winner Spotlight Card -->
+        <div
+          v-if="session.winner"
+          class="p-4 bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 border-2 border-amber-400/80 rounded-2xl shadow-glow-gold flex items-center justify-between gap-3"
+        >
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="relative shrink-0">
+              <img
+                :src="session.winner.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${session.winner.username}`"
+                class="w-14 h-14 rounded-2xl border-2 border-amber-400 shadow-xl"
+              />
+              <span class="absolute -top-2.5 -right-2 text-xl animate-bounce">👑</span>
+            </div>
+            <div :class="isRtl ? 'text-right' : 'text-left'" class="min-w-0">
+              <div class="text-[10px] text-amber-400 font-bold uppercase tracking-wider">
+                {{ isRtl ? 'بطل مسابقة الأسئلة بالمركز الأول' : 'TRIVIA QUIZ CHAMPION' }}
+              </div>
+              <div class="text-lg font-black text-white font-cairo truncate">
+                {{ session.winner.displayName }}
+              </div>
+              <div class="text-xs text-slate-400 font-mono">@{{ session.winner.username }}</div>
+            </div>
+          </div>
+
+          <div class="text-right font-mono shrink-0">
+            <div class="text-base font-black text-amber-300">
+              {{ session.winner.score || 0 }} {{ isRtl ? 'نقطة' : 'pts' }}
+            </div>
+            <div v-if="session.winner.correctAnswersCount" class="text-[10px] text-emerald-400 font-bold">
+              ✓ {{ session.winner.correctAnswersCount }} {{ isRtl ? 'إجابات صحيحة' : 'correct' }}
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="p-4 bg-slate-900/80 rounded-2xl border border-slate-700 text-slate-300 text-sm">
+          {{ isRtl ? 'اكتملت مسابقة الأسئلة! استعرض جدول ترتيب المتسابقين أدناه 🏁' : 'Quiz concluded! View final rankings below 🏁' }}
+        </div>
+
+        <!-- Full Contenders Scoreboard Leaderboard Table -->
+        <div class="space-y-1.5" :class="isRtl ? 'text-right' : 'text-left'">
+          <div class="flex items-center justify-between text-xs font-cairo font-bold text-amber-300 px-1">
+            <span>📊 {{ isRtl ? 'جدول ترتيب جميع المتسابقين بالنقاط:' : 'Contenders Leaderboard by Points:' }}</span>
+            <span class="text-[10px] font-mono text-slate-400">{{ allRankedPlayers.length }} {{ isRtl ? 'متسابق' : 'players' }}</span>
+          </div>
+
+          <div class="max-h-52 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin">
+            <template v-for="(p, idx) in allRankedPlayers" :key="p.username">
+              <div
+                class="flex items-center justify-between px-3 py-2 rounded-xl border text-xs transition-all"
+                :class="[
+                  idx === 0 && (p.score || 0) > 0 ? 'bg-amber-950/60 border-amber-400/80 text-white font-bold shadow-[0_0_15px_rgba(245,158,11,0.2)]' :
+                  idx === 1 && (p.score || 0) > 0 ? 'bg-slate-800/80 border-slate-500 text-slate-200' :
+                  idx === 2 && (p.score || 0) > 0 ? 'bg-amber-950/30 border-amber-800/60 text-amber-200' :
+                  'bg-slate-950/60 border-slate-800 text-slate-400'
+                ]"
+              >
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <span class="font-mono font-bold text-xs shrink-0" :class="idx < 3 ? 'text-amber-400' : 'text-slate-500'">
+                    {{ idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}` }}
+                  </span>
+                  <img
+                    :src="p.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${p.username}`"
+                    class="w-7 h-7 rounded-full border border-amber-400/40 shrink-0"
+                  />
+                  <div class="min-w-0">
+                    <div class="font-cairo font-bold text-white truncate flex items-center gap-1.5">
+                      <span>{{ p.displayName }}</span>
+                      <span class="text-[10px] text-slate-400 font-mono">@{{ p.username }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-3 font-mono shrink-0">
+                  <span v-if="p.correctAnswersCount" class="text-[10px] text-emerald-400 font-bold">
+                    ✓ {{ p.correctAnswersCount }}
+                  </span>
+                  <span class="px-2.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-black text-xs">
+                    {{ p.score || 0 }} {{ isRtl ? 'نقاط' : 'pts' }}
+                  </span>
+                </div>
+              </div>
+            </template>
+
+            <div v-if="allRankedPlayers.length === 0" class="text-center py-3 text-slate-500 text-xs font-tajawal">
+              {{ isRtl ? 'لم يشارك أحد في هذه المسابقة' : 'No recorded participants' }}
+            </div>
+          </div>
+        </div>
+
+        <div v-if="isAdmin" class="pt-2 flex justify-center gap-3">
           <button
+            type="button"
+            class="px-8 py-2.5 rounded-full font-cairo font-black text-xs bg-gradient-to-r from-amber-500 to-orange-500 text-dark-950 shadow-glow-gold hover:brightness-110 active:scale-95 transition"
             @click="emit('restartTrivia')"
-            class="px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-dark-950 font-black text-base shadow-xl hover:scale-105 transition active:scale-95"
           >
-            🔄 {{ isRtl ? 'إعادة ضبط وبدء مسابقة جديدة' : 'Restart Match' }}
+            🔄 {{ isRtl ? 'إعادة ضبط وبدء مسابقة جديدة' : 'Restart Quiz Match' }}
           </button>
         </div>
       </div>

@@ -59,7 +59,7 @@ const sortedPlayersByScore = computed(() => {
 
 // Streamer Word Form state (Admin only)
 const inputWord = ref('');
-const inputCategory = ref('ألعاب');
+const inputCategory = ref(isRtl.value ? 'ألعاب' : 'Gaming');
 const inputHint = ref('');
 const isWordMasked = ref(true);
 const showAdminFormModal = ref(false);
@@ -83,7 +83,7 @@ function handleLockWord() {
   if (!inputWord.value.trim()) return;
   const payload = {
     secretWord: inputWord.value.trim(),
-    category: inputCategory.value.trim() || 'عام',
+    category: inputCategory.value.trim() || (isRtl.value ? 'عام' : 'General'),
     hint: inputHint.value.trim()
   };
   if (status.value === 'ROUND_RESOLVED' && !isMatchFinished.value) {
@@ -634,7 +634,7 @@ defineExpose({
                 class="text-[11px] text-emerald-400 hover:underline flex items-center gap-1"
                 @click="isWordMasked = !isWordMasked"
               >
-                <span>{{ isWordMasked ? '👁️ إظهار' : '🔒 إخفاء' }}</span>
+                <span>{{ isWordMasked ? (isRtl ? '👁️ إظهار' : '👁️ Reveal') : (isRtl ? '🔒 إخفاء' : '🔒 Mask') }}</span>
               </button>
             </label>
             <input

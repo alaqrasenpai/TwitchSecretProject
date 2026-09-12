@@ -1,0 +1,114 @@
+name: Run Live Server (Public Link)
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration_hours:
+        description: 'Duration to keep server running (in hours, max 6)'
+        required: true
+        default: '6'
+        type: choice
+        options:
+          - '1'
+          - '2'
+          - '4'
+          - '6'
+
+jobs:
+  run-live:
+    name: Run Live Interactive Server
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Production App
+        run: npm run build
+        env:
+          NODE_ENV: production
+          NUXT_PUBLIC_APP_URL: http://localhost:3000
+
+      - name: Install Cloudflare Tunnel Client
+        run: |
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared.deb
+          rm -f cloudflared.deb
+
+      - name: Start ChatWar Server & Public Tunnel
+        run: |
+          PORT=3000 NODE_ENV=production node .output/server/index.mjs &
+          SERVER_PID=$!
+          echo "Server started with PID: $SERVER_PID"
+
+          echo "Waiting for local server on port 3000..."
+          for i in $(seq 1 30); do
+            if curl -s http://localhost:3000/ > /dev/null; then
+              echo "Server is UP and ready!"
+              break
+            fi
+            sleep 1
+          done
+
+          cloudflared tunnel --url http://localhost:3000 --no-autoupdate > tunnel.log 2>&1 &
+          TUNNEL_PID=$!
+
+          echo "Waiting for public HTTPS tunnel link..."
+          PUBLIC_URL=""
+          for i in $(seq 1 40); do
+            PUBLIC_URL=$(grep -oE "https://[a-zA-Z0-9-]+\.trycloudflare\.com" tunnel.log | head -n 1 || true)
+            if [ -n "$PUBLIC_URL" ]; then
+              break
+            fi
+            sleep 1
+          done
+
+          if [ -z "$PUBLIC_URL" ]; then
+            echo "Failed to get tunnel URL. Tunnel log:"
+            cat tunnel.log
+            exit 1
+          fi
+
+          echo "=========================================================="
+          echo "🚀 ChatWar IS NOW LIVE AND PUBLICLY ACCESSIBLE" 
+          echo "🔔 URL: $PUBLIC_URL"
+          echo "=========================================================="
+
+          echo "## 🎸 ChatWar Live Server is Running!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Your live interactive game server is active and accessible worldwide:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🌋 [Click to Open ChatWar Online]($PUBLIC_URL)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Public Link:** `$PUBLIC_URL`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Duration:** ${{ inputs.duration_hours }} hour(s)" >> $GITHUB_STEP_SUMMARY
+          echo "- **OBS Browser Source:** `$PUBLIC_URL/overlay/<token>`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> 💜 Share this URL with your viewers and broadcasters to play live on stream!" >> $GITHUB_STEP_SUMMARY
+
+          HOURS=${{ inputs.duration_hours }}
+          DURATION_SECONDS=$(( HOURS * 3600 ))
+          echo "Keeping server alive for $HOURS hour(s) ($DURATION_SECONDS seconds)..."
+
+          ELAPSED=0
+          while [ $ELAPSED -lt $DURATION_SECONDS ]; do
+            sleep 60
+            ELAPSED=$(( ELAPSED + 60 ))
+            if ! kill -0 $SERVER_PID 2>/dev/null; then
+              echo "Server process died unexpectedly. Exiting."
+              exit 1
+            fi
+            echo "Server alive... Elapsed: $(( ELAPSED / 60 )) min / $(( DURATION_SECONDS / 60 )) min"
+          done
+
+          echo "Runtime duration completed successfully."

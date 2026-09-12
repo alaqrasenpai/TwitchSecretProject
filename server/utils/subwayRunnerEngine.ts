@@ -39,53 +39,124 @@ export function generateSubwayObstacle(
   currentLane: SubwayLane = 'MIDDLE',
   roundNumber: number = 1
 ): ISubwayObstacle {
-  const obstacleChoices: Array<{
+  let obstacleChoices: Array<{
     type: ISubwayObstacle['type'];
     requiredAction: SubwayAction;
     labelAr: string;
     labelEn: string;
-  }> = [
-    {
-      type: 'LOW_BARRIER',
-      requiredAction: 'JUMP',
-      labelAr: '⬆️ اقفز! (JUMP)',
-      labelEn: '⬆️ JUMP! (اقفز)'
-    },
-    {
-      type: 'HIGH_BARRIER',
-      requiredAction: 'DUCK',
-      labelAr: '⬇️ انزل / تزحلق! (DUCK)',
-      labelEn: '⬇️ DUCK / SLIDE! (انزل)'
-    },
-    {
-      type: 'TRAIN_LEFT',
-      requiredAction: 'RIGHT',
-      labelAr: '➡️ اهرب يميناً! (RIGHT)',
-      labelEn: '➡️ DODGE RIGHT! (يمين)'
-    },
-    {
-      type: 'TRAIN_RIGHT',
-      requiredAction: 'LEFT',
-      labelAr: '⬅️ اهرب يساراً! (LEFT)',
-      labelEn: '⬅️ DODGE LEFT! (يسار)'
-    },
-    {
-      type: 'ROCK',
-      requiredAction: currentLane === 'LEFT' ? 'RIGHT' : 'LEFT',
-      labelAr: currentLane === 'LEFT' ? '➡️ تفادَ يميناً! (RIGHT)' : '⬅️ تفادَ يساراً! (LEFT)',
-      labelEn: currentLane === 'LEFT' ? '➡️ DODGE RIGHT! (يمين)' : '⬅️ DODGE LEFT! (يسار)'
-    }
-  ];
+    lane: SubwayLane;
+  }> = [];
+
+  if (currentLane === 'LEFT') {
+    // Runner is in leftmost track: CANNOT GO LEFT! Only RIGHT, JUMP, or DUCK!
+    // The oncoming threat appears directly on the LEFT track heading toward the runner.
+    obstacleChoices = [
+      {
+        type: 'LOW_BARRIER',
+        requiredAction: 'JUMP',
+        labelAr: '⬆️ حاجز في مسارك! اقفز! (JUMP)',
+        labelEn: '⬆️ BARRIER AHEAD! JUMP!',
+        lane: 'LEFT'
+      },
+      {
+        type: 'HIGH_BARRIER',
+        requiredAction: 'DUCK',
+        labelAr: '⬇️ عائق علوي في مسارك! انزل! (DUCK)',
+        labelEn: '⬇️ HIGH OBSTACLE! DUCK!',
+        lane: 'LEFT'
+      },
+      {
+        type: 'TRAIN_LEFT',
+        requiredAction: 'RIGHT',
+        labelAr: '➡️ قطار قادم في مسارك! اهرب يميناً! (RIGHT)',
+        labelEn: '➡️ TRAIN IN LANE! DODGE RIGHT!',
+        lane: 'LEFT'
+      },
+      {
+        type: 'ROCK',
+        requiredAction: 'RIGHT',
+        labelAr: '➡️ صخرة عملاقة في مسارك! تفادَ يميناً! (RIGHT)',
+        labelEn: '➡️ ROCK IN LANE! DODGE RIGHT!',
+        lane: 'LEFT'
+      }
+    ];
+  } else if (currentLane === 'RIGHT') {
+    // Runner is in rightmost track: CANNOT GO RIGHT! Only LEFT, JUMP, or DUCK!
+    // The oncoming threat appears directly on the RIGHT track heading toward the runner.
+    obstacleChoices = [
+      {
+        type: 'LOW_BARRIER',
+        requiredAction: 'JUMP',
+        labelAr: '⬆️ حاجز في مسارك! اقفز! (JUMP)',
+        labelEn: '⬆️ BARRIER AHEAD! JUMP!',
+        lane: 'RIGHT'
+      },
+      {
+        type: 'HIGH_BARRIER',
+        requiredAction: 'DUCK',
+        labelAr: '⬇️ عائق علوي في مسارك! انزل! (DUCK)',
+        labelEn: '⬇️ HIGH OBSTACLE! DUCK!',
+        lane: 'RIGHT'
+      },
+      {
+        type: 'TRAIN_RIGHT',
+        requiredAction: 'LEFT',
+        labelAr: '⬅️ قطار قادم في مسارك! اهرب يساراً! (LEFT)',
+        labelEn: '⬅️ TRAIN IN LANE! DODGE LEFT!',
+        lane: 'RIGHT'
+      },
+      {
+        type: 'ROCK',
+        requiredAction: 'LEFT',
+        labelAr: '⬅️ صخرة عملاقة في مسارك! تفادَ يساراً! (LEFT)',
+        labelEn: '⬅️ ROCK IN LANE! DODGE LEFT!',
+        lane: 'RIGHT'
+      }
+    ];
+  } else {
+    // Runner is in MIDDLE track: Can dodge LEFT, dodge RIGHT, JUMP, or DUCK!
+    obstacleChoices = [
+      {
+        type: 'LOW_BARRIER',
+        requiredAction: 'JUMP',
+        labelAr: '⬆️ حاجز في مسارك! اقفز! (JUMP)',
+        labelEn: '⬆️ BARRIER AHEAD! JUMP!',
+        lane: 'MIDDLE'
+      },
+      {
+        type: 'HIGH_BARRIER',
+        requiredAction: 'DUCK',
+        labelAr: '⬇️ عائق علوي في مسارك! انزل! (DUCK)',
+        labelEn: '⬇️ HIGH OBSTACLE! DUCK!',
+        lane: 'MIDDLE'
+      },
+      {
+        type: 'TRAIN_LEFT',
+        requiredAction: 'LEFT',
+        labelAr: '⬅️ قطار في الوسط! اهرب يساراً! (LEFT)',
+        labelEn: '⬅️ TRAIN IN MIDDLE! DODGE LEFT!',
+        lane: 'MIDDLE'
+      },
+      {
+        type: 'TRAIN_RIGHT',
+        requiredAction: 'RIGHT',
+        labelAr: '➡️ قطار في الوسط! اهرب يميناً! (RIGHT)',
+        labelEn: '➡️ TRAIN IN MIDDLE! DODGE RIGHT!',
+        lane: 'MIDDLE'
+      },
+      {
+        type: 'ROCK',
+        requiredAction: Math.random() > 0.5 ? 'LEFT' : 'RIGHT',
+        labelAr: '⚡ صخرة في مسارك! غير مسارك فوراً!',
+        labelEn: '⚡ ROCK IN LANE! CHANGE LANE!',
+        lane: 'MIDDLE'
+      }
+    ];
+  }
 
   const picked = obstacleChoices[Math.floor(Math.random() * obstacleChoices.length)];
 
   // Speed and reaction scaling per round:
-  // Round 1: 4.0s (Easy - learn commands)
-  // Round 2: 3.3s (Moderate)
-  // Round 3: 2.6s (Challenging)
-  // Round 4: 2.0s (Fast reflex)
-  // Round 5: 1.5s (Lightning reflex!)
-  // Round 6+: 1.1s minimum
   const effectiveRound = Math.max(roundNumber, speedLevel);
   const timeLimit = Math.max(1.1, Number((4.0 - (effectiveRound - 1) * 0.65).toFixed(1)));
   const now = Date.now();
@@ -98,7 +169,7 @@ export function generateSubwayObstacle(
     labelEn: picked.labelEn,
     timeLimitSeconds: timeLimit,
     deadline: now + timeLimit * 1000,
-    lane: currentLane
+    lane: picked.lane
   };
 }
 
@@ -272,10 +343,18 @@ export function submitSubwayAction(
     else if (action === 'DUCK') state.runnerAnimation = 'DUCK';
     else if (action === 'RIGHT') {
       state.runnerAnimation = 'SWITCH_RIGHT';
-      state.runnerLane = 'RIGHT';
+      if (state.runnerLane === 'LEFT' || obstacle.lane === 'LEFT') {
+        state.runnerLane = 'MIDDLE';
+      } else if (state.runnerLane === 'MIDDLE') {
+        state.runnerLane = 'RIGHT';
+      }
     } else if (action === 'LEFT') {
       state.runnerAnimation = 'SWITCH_LEFT';
-      state.runnerLane = 'LEFT';
+      if (state.runnerLane === 'RIGHT' || obstacle.lane === 'RIGHT') {
+        state.runnerLane = 'MIDDLE';
+      } else if (state.runnerLane === 'MIDDLE') {
+        state.runnerLane = 'LEFT';
+      }
     }
 
     state.recentEvents.unshift({
@@ -311,6 +390,16 @@ export function resolveSubwayObstacle(session: IGameSession): {
   aliveContenders.forEach((c) => {
     // If player didn't record a dodge in this obstacle window
     if (!c.lastReactionMs || c.lastReactionMs <= 0) {
+      // Safety guard: if runner is already at boundary (LEFT and obstacle asked LEFT, or RIGHT and obstacle asked RIGHT)
+      const isBoundaryNoOp =
+        (obstacle.requiredAction === 'LEFT' && state.runnerLane === 'LEFT') ||
+        (obstacle.requiredAction === 'RIGHT' && state.runnerLane === 'RIGHT');
+
+      if (isBoundaryNoOp) {
+        // Player is already safely at boundary edge, no hearts lost!
+        return;
+      }
+
       c.hearts = Math.max(0, c.hearts - 1);
       if (c.hearts <= 0) {
         c.status = 'ELIMINATED';

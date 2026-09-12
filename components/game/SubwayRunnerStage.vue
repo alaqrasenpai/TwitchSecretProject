@@ -55,6 +55,25 @@ const trackSpeedSeconds = computed(() => {
 const aliveContenders = computed(() => contenders.value.filter((c) => c.status === 'ALIVE'));
 const crashedContenders = computed(() => contenders.value.filter((c) => c.status === 'ELIMINATED'));
 
+const sortedContendersByScore = computed(() => {
+  return [...contenders.value].sort((a, b) => {
+    if (a.status === 'ALIVE' && b.status !== 'ALIVE') return -1;
+    if (a.status !== 'ALIVE' && b.status === 'ALIVE') return 1;
+    const scoreA = a.score || 0;
+    const scoreB = b.score || 0;
+    if (scoreB !== scoreA) return scoreB - scoreA;
+    const dodgesA = a.successfulDodges || 0;
+    const dodgesB = b.successfulDodges || 0;
+    if (dodgesB !== dodgesA) return dodgesB - dodgesA;
+    const heartsA = a.hearts || 0;
+    const heartsB = b.hearts || 0;
+    if (heartsB !== heartsA) return heartsB - heartsA;
+    const reactA = a.lastReactionMs || 9999;
+    const reactB = b.lastReactionMs || 9999;
+    return reactA - reactB;
+  });
+});
+
 // Animation state for character
 const isJumping = ref(false);
 const isDucking = ref(false);
@@ -181,8 +200,8 @@ const getObstacleLaneX = (lane: SubwayLane) => {
 
 // Runner character position
 const runnerX = computed(() => {
-  if (currentLane.value === 'LEFT') return '20%';
-  if (currentLane.value === 'RIGHT') return '80%';
+  if (currentLane.value === 'LEFT') return '18%';
+  if (currentLane.value === 'RIGHT') return '82%';
   return '50%';
 });
 </script>
@@ -290,46 +309,123 @@ const runnerX = computed(() => {
           ></div>
         </div>
 
-        <!-- Lane Labels (Top) -->
-        <div class="absolute top-2 inset-x-0 flex justify-around px-8 text-xs font-black text-slate-400/60 uppercase tracking-widest pointer-events-none z-10">
-          <span :class="{ 'text-cyan-400 font-black scale-110 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]': currentLane === 'LEFT' }">LEFT | يسار</span>
-          <span :class="{ 'text-cyan-400 font-black scale-110 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]': currentLane === 'MIDDLE' }">MIDDLE | وسط</span>
-          <span :class="{ 'text-cyan-400 font-black scale-110 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]': currentLane === 'RIGHT' }">RIGHT | يمين</span>
+        <!-- Lane Labels (Top) with Live Danger Warning -->
+        <div class="absolute top-2 inset-x-0 flex justify-around px-8 text-xs font-black uppercase tracking-widest pointer-events-none z-10">
+          <span :class="[
+            currentObstacle?.lane === 'LEFT' ? 'text-rose-500 font-black scale-110 drop-shadow-[0_0_14px_rgba(244,63,94,1)] animate-pulse' :
+            currentLane === 'LEFT' ? 'text-cyan-400 font-black scale-110 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]' : 'text-slate-400/60'
+          ]">
+            {{ currentObstacle?.lane === 'LEFT' ? '⚠️ ' : '' }}{{ isRtl ? 'مسار اليسار' : 'LEFT LANE' }}
+          </span>
+          <span :class="[
+            currentObstacle?.lane === 'MIDDLE' ? 'text-rose-500 font-black scale-110 drop-shadow-[0_0_14px_rgba(244,63,94,1)] animate-pulse' :
+            currentLane === 'MIDDLE' ? 'text-cyan-400 font-black scale-110 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]' : 'text-slate-400/60'
+          ]">
+            {{ currentObstacle?.lane === 'MIDDLE' ? '⚠️ ' : '' }}{{ isRtl ? 'مسار الوسط' : 'MIDDLE LANE' }}
+          </span>
+          <span :class="[
+            currentObstacle?.lane === 'RIGHT' ? 'text-rose-500 font-black scale-110 drop-shadow-[0_0_14px_rgba(244,63,94,1)] animate-pulse' :
+            currentLane === 'RIGHT' ? 'text-cyan-400 font-black scale-110 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]' : 'text-slate-400/60'
+          ]">
+            {{ currentObstacle?.lane === 'RIGHT' ? '⚠️ ' : '' }}{{ isRtl ? 'مسار اليمين' : 'RIGHT LANE' }}
+          </span>
+        </div>
+
+        <!-- Ground Danger Lane Target Strip on Rails -->
+        <div
+          v-if="currentObstacle && (status === 'SUBWAY_OBSTACLE' || status === 'SUBWAY_RUNNING' || state?.status === 'RUNNING')"
+          class="absolute bottom-0 w-36 h-64 bg-gradient-to-t from-rose-600/35 via-rose-500/15 to-transparent border-x-2 border-rose-500/50 pointer-events-none -translate-x-1/2 z-10 transition-all duration-300"
+          :style="{ left: getObstacleLaneX(currentObstacle.lane) }"
+        >
+          <div class="absolute bottom-3 inset-x-0 flex flex-col items-center gap-1 text-[10px] font-black text-rose-400 uppercase tracking-wider animate-pulse">
+            <span>🚨 {{ isRtl ? 'مسار خطر قادم!' : 'DANGER IN THIS LANE!' }} 🚨</span>
+            <div class="w-20 h-1 bg-rose-500/80 rounded-full animate-ping"></div>
+          </div>
         </div>
 
         <!-- ONCOMING OBSTACLE -->
         <div
           v-if="currentObstacle && (status === 'SUBWAY_OBSTACLE' || status === 'SUBWAY_RUNNING' || state?.status === 'RUNNING')"
+          :key="currentObstacle.id"
           class="absolute transition-all duration-300 transform-gpu -translate-x-1/2 flex flex-col items-center z-20"
           :style="{
             left: getObstacleLaneX(currentObstacle.lane),
-            top: '30%',
-            animation: 'obstacle-approach 1.8s ease-in forwards'
+            top: '25%',
+            animation: `obstacle-approach ${Math.min(2.0, currentObstacle.timeLimitSeconds * 0.9)}s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards`
           }"
         >
-          <!-- Obstacle Graphic & Label -->
-          <div
-            class="px-4 py-2.5 rounded-xl border-2 flex items-center gap-2 shadow-2xl backdrop-blur-md animate-bounce"
-            :class="[
-              currentObstacle.requiredAction === 'JUMP' ? 'bg-rose-950/90 border-rose-500 text-rose-200 shadow-rose-500/50' :
-              currentObstacle.requiredAction === 'DUCK' ? 'bg-amber-950/90 border-amber-500 text-amber-200 shadow-amber-500/50' :
-              'bg-blue-950/90 border-cyan-400 text-cyan-100 shadow-cyan-500/50'
-            ]"
-          >
-            <span class="text-3xl">
-              {{
-                currentObstacle.type === 'LOW_BARRIER' ? '🚧' :
-                currentObstacle.type === 'HIGH_BARRIER' ? '⚡' :
-                currentObstacle.type === 'ROCK' ? '🪨' : '🚄'
-              }}
-            </span>
-            <div class="text-center">
-              <div class="text-xs font-black uppercase tracking-wider text-white">
-                {{ isRtl ? currentObstacle.labelAr : currentObstacle.labelEn }}
+          <!-- Obstacle Graphic -->
+          <div class="flex flex-col items-center select-none">
+            <!-- 1. Train Model (Trains oncoming down the rails) -->
+            <template v-if="currentObstacle.type.includes('TRAIN')">
+              <div class="relative flex flex-col items-center">
+                <!-- Dual Halogen Headlights Beams on Rails -->
+                <div class="w-32 h-28 bg-gradient-to-b from-amber-300/40 via-amber-400/10 to-transparent blur-md -mb-6 pointer-events-none"></div>
+                <!-- Train Body -->
+                <div class="w-24 h-24 rounded-2xl bg-gradient-to-b from-slate-800 via-rose-950 to-slate-950 border-2 border-rose-500 shadow-[0_0_35px_rgba(244,63,94,0.9)] flex flex-col items-center justify-between p-2 relative overflow-hidden">
+                  <!-- Red Warning Beacon -->
+                  <div class="w-6 h-2 bg-red-500 rounded-full shadow-[0_0_12px_red] animate-ping"></div>
+                  <!-- Windshield -->
+                  <div class="w-full h-7 bg-cyan-950/80 rounded-md border border-cyan-400/60 flex items-center justify-center">
+                    <span class="text-[9px] font-mono font-black text-cyan-300 tracking-wider">BULLET 🚅</span>
+                  </div>
+                  <!-- Dual Headlights & Bumper -->
+                  <div class="w-full flex items-center justify-between px-1">
+                    <div class="w-4 h-4 rounded-full bg-amber-300 shadow-[0_0_15px_rgba(252,211,77,1)] border border-white"></div>
+                    <span class="text-[8px] font-black text-rose-300 font-mono tracking-tighter uppercase">DANGER</span>
+                    <div class="w-4 h-4 rounded-full bg-amber-300 shadow-[0_0_15px_rgba(252,211,77,1)] border border-white"></div>
+                  </div>
+                </div>
               </div>
-              <div class="text-[10px] font-bold opacity-80">
-                {{ isRtl ? ('المسار: ' + (currentObstacle.lane === 'LEFT' ? 'اليسار' : currentObstacle.lane === 'RIGHT' ? 'اليمين' : 'الوسط')) : ('Lane: ' + currentObstacle.lane) }}
+            </template>
+
+            <!-- 2. Low Barrier Model (Jump Prompt) -->
+            <template v-else-if="currentObstacle.type === 'LOW_BARRIER'">
+              <div class="flex flex-col items-center">
+                <div class="px-3 py-1 bg-rose-600 text-white font-black text-[10px] rounded-t-lg shadow-lg animate-bounce flex items-center gap-1">
+                  <span>⬆️</span>
+                  <span>{{ isRtl ? 'اقفز فوق الحاجز' : 'JUMP OVER' }}</span>
+                </div>
+                <!-- Hazard Barricade -->
+                <div class="w-28 h-10 rounded-xl bg-amber-500 border-2 border-amber-300 shadow-[0_0_25px_rgba(245,158,11,0.8)] flex items-center justify-between px-2 overflow-hidden relative">
+                  <div class="absolute inset-0 bg-[repeating-linear-gradient(45deg,#000,#000_10px,#f59e0b_10px,#f59e0b_20px)] opacity-60"></div>
+                  <span class="relative z-10 text-lg">🚧</span>
+                  <span class="relative z-10 text-xs font-black text-black tracking-wider font-mono">BARRIER</span>
+                  <span class="relative z-10 text-lg">🚧</span>
+                </div>
               </div>
+            </template>
+
+            <!-- 3. High Barrier Model (Duck / Slide Prompt) -->
+            <template v-else-if="currentObstacle.type === 'HIGH_BARRIER'">
+              <div class="flex flex-col items-center">
+                <!-- Overhead Laser Barricade -->
+                <div class="w-32 h-8 rounded-xl bg-purple-950 border-2 border-fuchsia-500 shadow-[0_0_30px_rgba(217,70,239,0.9)] flex items-center justify-around px-2 relative overflow-hidden">
+                  <div class="absolute inset-0 bg-gradient-to-r from-transparent via-fuchsia-400 to-transparent animate-pulse opacity-80"></div>
+                  <span class="relative z-10 text-sm">⚡</span>
+                  <span class="relative z-10 text-[10px] font-black text-white font-mono uppercase tracking-widest">HIGH LASER</span>
+                  <span class="relative z-10 text-sm">⚡</span>
+                </div>
+                <div class="px-3 py-1 bg-amber-500 text-black font-black text-[10px] rounded-b-lg shadow-lg flex items-center gap-1 mt-0.5 animate-bounce">
+                  <span>⬇️</span>
+                  <span>{{ isRtl ? 'انزل / تزحلق تحته' : 'DUCK / SLIDE' }}</span>
+                </div>
+              </div>
+            </template>
+
+            <!-- 4. Giant Boulder / Rock Model -->
+            <template v-else>
+              <div class="flex flex-col items-center">
+                <div class="w-24 h-20 rounded-3xl bg-gradient-to-b from-stone-700 to-stone-900 border-2 border-amber-600 shadow-[0_0_25px_rgba(217,119,6,0.8)] flex flex-col items-center justify-center p-2 relative overflow-hidden">
+                  <span class="text-3xl animate-pulse">🪨</span>
+                  <span class="text-[9px] font-black text-amber-400 font-mono tracking-wider">BOULDER</span>
+                </div>
+              </div>
+            </template>
+
+            <!-- Info Pill Under Obstacle -->
+            <div class="mt-1 px-3 py-0.5 rounded-full bg-black/90 border border-slate-700 text-[10px] font-bold text-slate-300 shadow-md">
+              {{ isRtl ? currentObstacle.labelAr : currentObstacle.labelEn }}
             </div>
           </div>
         </div>
@@ -399,9 +495,10 @@ const runnerX = computed(() => {
               </div>
               <div class="text-2xl font-black tracking-wide font-mono">
                 {{
-                  currentObstacle.requiredAction === 'JUMP' ? 'jump / قفز' :
-                  currentObstacle.requiredAction === 'DUCK' ? 'duck / انزل' :
-                  currentObstacle.requiredAction === 'LEFT' ? 'left / يسار' : 'right / يمين'
+                  currentObstacle.requiredAction === 'JUMP' ? (isRtl ? 'قفز / jump' : 'JUMP') :
+                  currentObstacle.requiredAction === 'DUCK' ? (isRtl ? 'انزل / duck' : 'DUCK') :
+                  currentObstacle.requiredAction === 'LEFT' ? (isRtl ? 'يسار / left' : 'LEFT') :
+                  (isRtl ? 'يمين / right' : 'RIGHT')
                 }}
               </div>
             </div>
@@ -499,19 +596,19 @@ const runnerX = computed(() => {
         <div class="grid grid-cols-4 gap-2 mb-6 text-center">
           <div class="bg-slate-950 p-2 rounded-xl border border-cyan-500/30">
             <div class="text-lg">⬆️</div>
-            <div class="text-[11px] font-bold text-cyan-300">jump / قفز</div>
+            <div class="text-[11px] font-bold text-cyan-300">{{ isRtl ? 'قفز / jump' : 'jump' }}</div>
           </div>
           <div class="bg-slate-950 p-2 rounded-xl border border-cyan-500/30">
             <div class="text-lg">⬇️</div>
-            <div class="text-[11px] font-bold text-cyan-300">duck / انزل</div>
+            <div class="text-[11px] font-bold text-cyan-300">{{ isRtl ? 'انزل / duck' : 'duck' }}</div>
           </div>
           <div class="bg-slate-950 p-2 rounded-xl border border-cyan-500/30">
             <div class="text-lg">⬅️</div>
-            <div class="text-[11px] font-bold text-cyan-300">left / يسار</div>
+            <div class="text-[11px] font-bold text-cyan-300">{{ isRtl ? 'يسار / left' : 'left' }}</div>
           </div>
           <div class="bg-slate-950 p-2 rounded-xl border border-cyan-500/30">
             <div class="text-lg">➡️</div>
-            <div class="text-[11px] font-bold text-cyan-300">right / يمين</div>
+            <div class="text-[11px] font-bold text-cyan-300">{{ isRtl ? 'يمين / right' : 'right' }}</div>
           </div>
         </div>
 
@@ -526,40 +623,142 @@ const runnerX = computed(() => {
         </div>
       </div>
 
-      <!-- GAME CRASHED / FINISHED OVERLAY -->
+      <!-- GAME CRASHED / FINISHED GRAND SCOREBOARD OVERLAY -->
       <div
         v-if="status === 'SUBWAY_CRASHED' || status === 'FINISHED' || state?.status === 'MATCH_OVER'"
-        class="text-center p-6 bg-slate-900/95 backdrop-blur-xl rounded-2xl border-2 border-rose-500/50 max-w-lg shadow-2xl my-auto animate-fade-in"
+        class="w-full max-w-2xl text-center space-y-4 p-5 sm:p-7 bg-gradient-to-b from-slate-950 via-slate-900/98 to-slate-950 border-2 border-cyan-500/60 rounded-3xl shadow-[0_0_50px_rgba(6,182,212,0.3)] backdrop-blur-xl my-auto animate-scale-up"
       >
-        <div class="text-5xl mb-2">💥🏁</div>
-        <h2 class="text-2xl font-black text-rose-400 mb-1">
-          {{ isRtl ? 'انتهت جولة الهروب السريع!' : 'Subway Run Ended!' }}
-        </h2>
-        <div class="text-lg font-bold text-white mb-4">
-          {{ isRtl ? 'المسافة النهائية:' : 'Final Distance:' }}
-          <span class="text-cyan-400 font-mono text-xl">{{ distanceMeters.toLocaleString() }} m</span>
+        <div class="inline-flex items-center gap-2 px-4 py-1 bg-cyan-500/20 text-cyan-300 border border-cyan-400/50 rounded-full text-xs font-cairo font-black uppercase tracking-widest shadow-glow-cyan">
+          🏁 {{ isRtl ? 'لوحة النتائج والترتيب النهائي (SCOREBOARD)' : 'FINAL SCOREBOARD & RUNNERS' }}
         </div>
 
-        <!-- Winner / MVP -->
-        <div v-if="winner" class="bg-slate-950/80 p-4 rounded-xl border border-amber-500/40 mb-5 flex items-center justify-center gap-3">
-          <span class="text-3xl">👑</span>
-          <div class="text-right">
-            <div class="text-[10px] text-amber-400 font-bold uppercase">
-              {{ isRtl ? 'الناجي الأسطوري وبطل السباق' : 'MVP Survivor' }}
+        <div class="flex items-center justify-around p-3 bg-slate-950/80 rounded-2xl border border-slate-800 text-xs font-mono">
+          <div>
+            <span class="block text-[10px] text-slate-400">{{ isRtl ? 'المسافة المقطوعة' : 'Distance' }}</span>
+            <span class="font-black text-cyan-400 text-base">{{ distanceMeters.toLocaleString() }} m</span>
+          </div>
+          <div class="h-6 w-px bg-slate-800" />
+          <div>
+            <span class="block text-[10px] text-slate-400">{{ isRtl ? 'الجولة' : 'Round' }}</span>
+            <span class="font-black text-amber-400 text-base">{{ currentRound }} / {{ totalRounds }}</span>
+          </div>
+          <div class="h-6 w-px bg-slate-800" />
+          <div>
+            <span class="block text-[10px] text-slate-400">{{ isRtl ? 'عقبات تم تفاديها' : 'Dodged' }}</span>
+            <span class="font-black text-emerald-400 text-base">{{ obstaclesDodged }}</span>
+          </div>
+        </div>
+
+        <!-- Winner / MVP Spotlight Card -->
+        <div
+          v-if="winner"
+          class="p-3.5 bg-gradient-to-r from-cyan-950/60 via-slate-900 to-amber-950/60 rounded-2xl border border-amber-400/60 flex items-center justify-between gap-3 shadow-glow-gold"
+        >
+          <div class="flex items-center gap-3">
+            <div class="relative">
+              <img
+                :src="winner.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${winner.username}`"
+                class="w-12 h-12 rounded-full border-2 border-amber-400 shadow-md"
+              />
+              <span class="absolute -top-2 -right-1 text-base">👑</span>
             </div>
-            <div class="text-base font-black text-white">
-              {{ winner.displayName }}
+            <div :class="isRtl ? 'text-right' : 'text-left'">
+              <div class="text-[10px] text-amber-400 font-bold uppercase tracking-wider">
+                {{ isRtl ? 'بطل السباق والناجي الأسطوري' : 'MVP SURVIVOR & CHAMPION' }}
+              </div>
+              <div class="text-base font-black text-white font-cairo leading-tight">
+                {{ winner.displayName }}
+              </div>
+              <div class="text-[10px] text-slate-400 font-mono">@{{ winner.username }}</div>
+            </div>
+          </div>
+
+          <div class="text-right font-mono">
+            <div class="text-xs font-bold text-cyan-300">
+              {{ winner.successfulDodges || 0 }} {{ isRtl ? 'تفادي' : 'dodges' }}
+            </div>
+            <div class="text-xs font-black text-amber-400">
+              {{ winner.score || 0 }} {{ isRtl ? 'نقطة' : 'pts' }}
             </div>
           </div>
         </div>
 
-        <div v-if="isAdmin" class="flex justify-center gap-3">
+        <!-- Full Contenders Scoreboard Leaderboard Table -->
+        <div class="space-y-1.5" :class="isRtl ? 'text-right' : 'text-left'">
+          <div class="flex items-center justify-between text-xs font-cairo font-bold text-cyan-300 px-1">
+            <span>📊 {{ isRtl ? 'ترتيب المتسابقين حسب الصمود والنقاط:' : 'Contenders Leaderboard & Dodges:' }}</span>
+            <span class="text-[10px] font-mono text-slate-400">{{ sortedContendersByScore.length }} {{ isRtl ? 'متسابق' : 'runners' }}</span>
+          </div>
+
+          <div class="max-h-52 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin">
+            <template v-for="(c, idx) in sortedContendersByScore" :key="c.username">
+              <div
+                class="flex items-center justify-between px-3 py-2 rounded-xl border text-xs transition-all"
+                :class="[
+                  idx === 0 && (c.score || 0) > 0 ? 'bg-amber-950/50 border-amber-400/80 text-white font-bold shadow-[0_0_15px_rgba(245,158,11,0.2)]' :
+                  idx === 1 && (c.score || 0) > 0 ? 'bg-slate-800/80 border-slate-500 text-slate-200' :
+                  idx === 2 && (c.score || 0) > 0 ? 'bg-cyan-950/40 border-cyan-700 text-cyan-200' :
+                  'bg-slate-950/60 border-slate-800 text-slate-400'
+                ]"
+              >
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <span class="font-mono font-bold text-xs shrink-0" :class="idx < 3 ? 'text-amber-400' : 'text-slate-500'">
+                    {{ idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}` }}
+                  </span>
+                  <img
+                    :src="c.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${c.username}`"
+                    class="w-7 h-7 rounded-full border shrink-0"
+                    :class="c.status === 'ALIVE' ? 'border-cyan-400/60' : 'border-rose-900/60 grayscale'"
+                  />
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-1.5 truncate">
+                      <span class="font-cairo font-bold text-white truncate">{{ c.displayName }}</span>
+                      <span
+                        class="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold uppercase shrink-0"
+                        :class="c.status === 'ALIVE' ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/50' : 'bg-red-950 text-red-400 border border-red-500/40'"
+                      >
+                        {{ c.status === 'ALIVE' ? (isRtl ? 'صامد' : 'ALIVE') : (isRtl ? 'مستبعد' : 'OUT') }}
+                      </span>
+                    </div>
+                    <div class="flex items-center gap-1 mt-0.5">
+                      <span v-for="h in 3" :key="h" class="text-[10px]">
+                        {{ h <= c.hearts ? '❤️' : '🖤' }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-3 font-mono shrink-0">
+                  <div class="text-right">
+                    <div class="text-[10px] text-cyan-300 font-bold">
+                      {{ c.successfulDodges || 0 }} {{ isRtl ? 'تفادي' : 'dodges' }}
+                    </div>
+                    <div v-if="c.lastReactionMs" class="text-[9px] text-slate-400">
+                      ⚡ {{ c.lastReactionMs }}ms
+                    </div>
+                  </div>
+                  <span class="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-black text-xs">
+                    {{ c.score || 0 }} {{ isRtl ? 'نقاط' : 'pts' }}
+                  </span>
+                </div>
+              </div>
+            </template>
+
+            <div v-if="sortedContendersByScore.length === 0" class="text-center py-3 text-slate-500 text-xs font-tajawal">
+              {{ isRtl ? 'لم يشارك أحد في هذا السباق' : 'No contenders joined this run' }}
+            </div>
+          </div>
+        </div>
+
+        <div v-if="isAdmin" class="pt-2 flex justify-center gap-3">
           <GamerButton
-            variant="secondary"
-            class="px-6 py-2.5 font-bold"
+            size="md"
+            variant="primary"
+            rounded="full"
+            class="shadow-glow-cyan font-black text-xs px-8 py-2.5 !bg-gradient-to-r !from-cyan-500 !to-indigo-600 hover:!brightness-110"
             @click="emit('restartGame')"
           >
-            🔄 {{ isRtl ? 'إعادة المحاولة' : 'Play Again' }}
+            🔄 {{ isRtl ? 'إعادة المحاولة والركض من جديد' : 'Play Again' }}
           </GamerButton>
         </div>
       </div>
@@ -625,7 +824,7 @@ const runnerX = computed(() => {
               class="text-xs px-2.5 py-1 text-cyan-300"
               @click="emit('submitAction', 'JUMP')"
             >
-              ⬆️ Jump
+              ⬆️ {{ isRtl ? 'قفز' : 'Jump' }}
             </GamerButton>
             <GamerButton
               size="sm"
@@ -633,7 +832,7 @@ const runnerX = computed(() => {
               class="text-xs px-2.5 py-1 text-cyan-300"
               @click="emit('submitAction', 'DUCK')"
             >
-              ⬇️ Duck
+              ⬇️ {{ isRtl ? 'انزل' : 'Duck' }}
             </GamerButton>
             <GamerButton
               size="sm"
@@ -641,7 +840,7 @@ const runnerX = computed(() => {
               class="text-xs px-2.5 py-1 text-cyan-300"
               @click="emit('submitAction', 'LEFT')"
             >
-              ⬅️ Left
+              ⬅️ {{ isRtl ? 'يسار' : 'Left' }}
             </GamerButton>
             <GamerButton
               size="sm"
@@ -649,7 +848,7 @@ const runnerX = computed(() => {
               class="text-xs px-2.5 py-1 text-cyan-300"
               @click="emit('submitAction', 'RIGHT')"
             >
-              ➡️ Right
+              ➡️ {{ isRtl ? 'يمين' : 'Right' }}
             </GamerButton>
             <GamerButton
               size="sm"
@@ -695,14 +894,14 @@ const runnerX = computed(() => {
 
 @keyframes obstacle-approach {
   0% {
-    transform: translate(-50%, -80px) scale(0.3);
+    transform: translate(-50%, -85px) scale(0.2);
     opacity: 0.2;
   }
-  50% {
+  30% {
     opacity: 1;
   }
   100% {
-    transform: translate(-50%, 40px) scale(1);
+    transform: translate(-50%, 45px) scale(1.15);
     opacity: 1;
   }
 }

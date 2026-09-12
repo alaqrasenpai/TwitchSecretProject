@@ -28,7 +28,7 @@ export function normalizeText(text: string): string {
 }
 
 export function createInitialTypeRaceState(
-  targetScore: number = 3,
+  targetScore: number = 0,
   totalRounds: number = 7,
   timeLimitSeconds: number = 15,
   language: 'AR' | 'EN' | 'MIXED' = 'AR'
@@ -152,19 +152,6 @@ export function submitTypeRaceAttempt(
   state.fastestTypist = roundWinner;
   state.roundWinners.push(roundWinner);
 
-  let isMatchOver = false;
-  let matchWinner: IPlayer | null = null;
-
-  // Check if player reached target score or max rounds reached
-  if (state.scores[cleanUser] >= state.targetScore || state.currentRound >= state.totalRounds) {
-    isMatchOver = true;
-    matchWinner = player;
-    state.winner = player;
-    state.status = 'MATCH_OVER';
-    session.winner = player;
-    session.status = 'FINISHED';
-  }
-
   const log: Partial<IGameLog> = {
     id: `type-win-${player.number}-${Date.now()}`,
     timestamp: new Date().toISOString(),
@@ -178,8 +165,8 @@ export function submitTypeRaceAttempt(
     isCorrect: true,
     timeMs,
     timeFormatted,
-    isMatchOver,
-    winner: matchWinner,
+    isMatchOver: false,
+    winner: null,
     log
   };
 }
@@ -189,10 +176,19 @@ export function advanceTypeRaceNextRound(
   language: 'AR' | 'EN' | 'MIXED' = 'AR',
   players: IPlayer[] = []
 ): { isMatchOver: boolean; winner: IPlayer | null } {
-  // If we already reached total rounds, finish match!
+  // If we reached or exceeded the configured total rounds, finish match!
   if (state.currentRound >= state.totalRounds) {
     state.status = 'MATCH_OVER';
-    const sorted = [...players].sort((a, b) => (b.score || 0) - (a.score || 0));
+    const sorted = [...players].sort((a, b) => {
+      const scoreDiff = (b.score || 0) - (a.score || 0);
+      if (scoreDiff !== 0) return scoreDiff;
+      // Tiebreak by total time in roundWinners (lower time is better)
+      const userA = (a.username || '').toLowerCase();
+      const userB = (b.username || '').toLowerCase();
+      const timeA = state.roundWinners.filter((w) => (w.username || '').toLowerCase() === userA).reduce((s, w) => s + (w.timeMs || 0), 0);
+      const timeB = state.roundWinners.filter((w) => (w.username || '').toLowerCase() === userB).reduce((s, w) => s + (w.timeMs || 0), 0);
+      return timeA - timeB;
+    });
     const winner = sorted.length > 0 && (sorted[0].score || 0) > 0 ? sorted[0] : null;
     state.winner = winner;
     return { isMatchOver: true, winner };

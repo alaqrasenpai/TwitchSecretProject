@@ -48,6 +48,11 @@ watch(isRtl, (newVal) => {
 
 let chatCycleInterval: any = null;
 onMounted(() => {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('chatwar_streamer_channel') || localStorage.getItem('twitch_channel');
+    if (saved) twitchChannelInput.value = saved.trim();
+  }
+
   simulatedChatFeed.value = getDefaultChatFeed(isRtl.value);
   chatCycleInterval = setInterval(() => {
     const mockUsers = isRtl.value
@@ -90,20 +95,91 @@ const platformsList = [
   { id: 'tiktok', name: 'TikTok', icon: '🎵', brandClass: 'from-pink-600 to-cyan-500' }
 ];
 
-function quickStartStream(gameType?: string) {
+const confirmResumeModal = ref<{
+  isOpen: boolean;
+  sessionId: string;
+  gameType: string;
+  gameTitle: string;
+}>({
+  isOpen: false,
+  sessionId: '',
+  gameType: '',
+  gameTitle: ''
+});
+
+function getGameTitle(type: string) {
+  if (type === 'SUBWAY_RUNNER') return isRtl.value ? 'مسار الهروب السريع (Subway Runner)' : 'Subway Runner';
+  if (type === 'TRIVIA') return isRtl.value ? 'مسابقة الأسئلة (Trivia Quiz)' : 'Trivia Quiz';
+  if (type === 'TYPE_RACE') return isRtl.value ? 'سباق سرعة الكتابة (Type Race)' : 'Type Race';
+  if (type === 'HANGMAN') return isRtl.value ? 'تحدي الكلمة المخفية (Secret Word)' : 'Secret Word';
+  if (type === 'HOT_POTATO') return isRtl.value ? 'القنبلة الموقوتة (Hot Potato)' : 'Hot Potato';
+  if (type === 'GRID_ROYALE') return isRtl.value ? 'حلبة البقاء (Grid Royale)' : 'Grid Royale';
+  if (type === 'ROULETTE') return isRtl.value ? 'روليت الاستبعاد (Roulette)' : 'Stream Roulette';
+  if (type === 'BOARD_PARTY') return isRtl.value ? 'حرب المتاهة (Board Party)' : 'Pummel Maze War';
+  return type || (isRtl.value ? 'اللعبة السابقة' : 'Previous Game');
+}
+
+function handleLaunchGames() {
   const channel = twitchChannelInput.value.trim();
   if (!channel) {
     showPlatformModal.value = true;
     return;
   }
+
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('chatwar_streamer_channel', channel);
+    localStorage.setItem('twitch_channel', channel);
+  }
+
+  // Check if there is an active ongoing session
+  const existing = gameStore.currentSession || gameStore.getFromLocalStorage();
+  const isExistingActive = !!(
+    existing &&
+    existing.sessionId &&
+    existing.status !== 'FINISHED'
+  );
+
+  if (isExistingActive && existing) {
+    confirmResumeModal.value = {
+      isOpen: true,
+      sessionId: existing.sessionId,
+      gameType: existing.gameType,
+      gameTitle: getGameTitle(existing.gameType)
+    };
+    return;
+  }
+
+  // No active session: go straight to dashboard games selection catalog!
+  navigateToDashboard();
+}
+
+function navigateToDashboard() {
+  const channel = twitchChannelInput.value.trim();
   navigateTo({
     path: '/dashboard',
     query: {
-      channel,
-      platform: selectedPlatform.value,
-      ...(gameType ? { gameType } : {})
+      channel: channel || undefined,
+      platform: selectedPlatform.value
     }
   });
+}
+
+function resumeExistingGame() {
+  const sId = confirmResumeModal.value.sessionId;
+  confirmResumeModal.value.isOpen = false;
+  if (sId) {
+    navigateTo(`/dashboard/room/${sId}`);
+  } else {
+    navigateToDashboard();
+  }
+}
+
+async function declineResumeAndGoToGames() {
+  confirmResumeModal.value.isOpen = false;
+  // Delete the lingering previous session completely from server and localStorage
+  await gameStore.deleteCurrentSession();
+  // Take the user cleanly to the games list to choose a new game
+  navigateToDashboard();
 }
 
 function onModalConnect(platforms: { id: string; channel: string }[]) {
@@ -114,13 +190,7 @@ function onModalConnect(platforms: { id: string; channel: string }[]) {
       selectedPlatform.value = chosen.id as any;
     }
     showPlatformModal.value = false;
-    navigateTo({
-      path: '/dashboard',
-      query: {
-        channel: chosen.channel.trim(),
-        platform: chosen.id
-      }
-    });
+    handleLaunchGames();
   }
 }
 </script>
@@ -180,7 +250,7 @@ function onModalConnect(platforms: { id: string; channel: string }[]) {
                   :placeholder="isRtl ? `اكتب اسم قناتك على ${platformsList.find(p => p.id === selectedPlatform)?.name}...` : `Enter your ${platformsList.find(p => p.id === selectedPlatform)?.name} channel...`"
                   class="w-full px-5 py-3.5 bg-black/60 border border-white/10 focus:border-indigo-400 focus:shadow-[0_0_20px_rgba(99,102,241,0.3)] rounded-2xl font-tajawal text-sm text-white placeholder-slate-500 focus:outline-none transition-all"
                   :class="isRtl ? 'text-right' : 'text-left'"
-                  @keyup.enter="quickStartStream('SUBWAY_RUNNER')"
+                  @keyup.enter="handleLaunchGames"
                 />
               </div>
 
@@ -189,8 +259,8 @@ function onModalConnect(platforms: { id: string; channel: string }[]) {
                 variant="primary"
                 rounded="2xl"
                 :loading="isLaunching"
-                class="px-7 py-3.5 !bg-gradient-to-r !from-indigo-500 !via-purple-600 !to-cyan-500 hover:!brightness-115 shadow-[0_0_25px_rgba(99,102,241,0.5)] font-black text-sm flex-shrink-0"
-                @click="quickStartStream('SUBWAY_RUNNER')"
+                class="px-7 py-3.5 !bg-gradient-to-r !from-indigo-500 !via-purple-600 !to-cyan-500 hover:!brightness-115 shadow-[0_0_25px_rgba(99,102,241,0.5)] font-black text-sm flex-shrink-0 cursor-pointer"
+                @click="handleLaunchGames"
               >
                 <span>🚀 {{ isRtl ? 'بدء اللعب فوراً' : 'Launch Games' }}</span>
                 <span :class="isRtl ? 'rotate-180' : ''">→</span>
@@ -865,5 +935,57 @@ function onModalConnect(platforms: { id: string; channel: string }[]) {
       @close="showPlatformModal = false"
       @connect="onModalConnect"
     />
+
+    <!-- Active Game Confirmation Dialog on Launch -->
+    <div
+      v-if="confirmResumeModal.isOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in"
+      @click.self="confirmResumeModal.isOpen = false"
+    >
+      <div
+        class="relative w-full max-w-md bg-[#0e111a] border border-indigo-500/50 rounded-3xl shadow-[0_0_40px_rgba(99,102,241,0.3)] p-6 sm:p-7 space-y-5 animate-scale-up"
+        :class="isRtl ? 'text-right' : 'text-left'"
+      >
+        <div class="flex items-center gap-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-indigo-950/80 border border-indigo-500/50 text-indigo-300 flex items-center justify-center text-2xl shrink-0">
+            🎮
+          </div>
+          <div>
+            <h3 class="font-cairo font-black text-xl text-white">
+              {{ isRtl ? 'توجد لعبة جارية بالفعل!' : 'Active Game In Progress!' }}
+            </h3>
+            <p class="text-xs font-tajawal text-slate-400 mt-0.5">
+              ChatWar Arena
+            </p>
+          </div>
+        </div>
+
+        <div class="p-4 bg-[#141824] rounded-2xl border border-[#27314a] font-tajawal text-sm text-slate-200 leading-relaxed">
+          {{
+            isRtl
+              ? `لديك لعبة نشطة حالياً (${confirmResumeModal.gameTitle}). هل ترغب في العودة إليها وإكمالها، أم الانتقال لقائمة الألعاب لاختيار لعبة جديدة؟`
+              : `You have an active ongoing game (${confirmResumeModal.gameTitle}). Would you like to resume and continue it, or proceed to the games list to choose a new game?`
+          }}
+        </div>
+
+        <div class="flex flex-col sm:flex-row items-center justify-end gap-2.5 pt-2">
+          <button
+            type="button"
+            class="w-full sm:w-auto px-5 py-2.5 rounded-full bg-[#141824] hover:bg-[#1a2030] border border-[#27314a] text-xs font-cairo font-bold text-rose-300 hover:text-rose-200 transition-colors cursor-pointer"
+            @click="declineResumeAndGoToGames"
+          >
+            {{ isRtl ? 'لا، اختيار لعبة جديدة 📋' : 'No, Choose New Game 📋' }}
+          </button>
+
+          <button
+            type="button"
+            class="w-full sm:w-auto px-6 py-2.5 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-xs font-cairo font-black text-white transition-all shadow-lg hover:scale-105 active:scale-95 cursor-pointer shadow-indigo-900/50"
+            @click="resumeExistingGame"
+          >
+            {{ isRtl ? 'نعم، استئناف اللعبة ↗️' : 'Yes, Resume Game ↗️' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

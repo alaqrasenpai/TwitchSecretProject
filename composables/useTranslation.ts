@@ -276,8 +276,8 @@ export const translations = {
     typeRule3Desc: 'The first participant to type the exact word correctly in chat wins the round and gains 1 point instantly!',
     typeRule4Title: '4. Millisecond Precision',
     typeRule4Desc: 'The system computes typing reaction speed down to the exact millisecond, displaying response speed live.',
-    typeRule5Title: '5. Victory Target',
-    typeRule5Desc: 'The first contender to reach the match target score (e.g. 3 or 5 points) is crowned the Type Race Champion!',
+    typeRule5Title: '5. Victory & Champion Crown',
+    typeRule5Desc: 'The participant with the highest total points at the end of all race rounds is crowned the Type Race Champion! (Ties resolved by fastest time)',
 
     // Rules Modal - Hangman
     hangmanRulesModalTitle: 'Secret Word Challenge Rules & Guide',
@@ -285,7 +285,7 @@ export const translations = {
     hangmanRule1Title: '1. Secret Word Entry (Masked)',
     hangmanRule1Desc: 'Streamer enters a secret word (or picks from categories). The word is securely masked so chat and overlay cannot see it.',
     hangmanRule2Title: '2. Chat Guessing Commands',
-    hangmanRule2Desc: 'Viewers submit word guesses in chat using !guess <word>, !تخمين <word>, or by typing words directly.',
+    hangmanRule2Desc: 'Viewers submit word guesses in chat using !guess <word> or by typing words directly.',
     hangmanRule3Title: '3. Wordle Letter Feedback',
     hangmanRule3Desc: 'Each guess displays tiles: 🟩 Green (correct letter & spot), 🟨 Yellow (in word, wrong spot), ⬛ Gray (not in word). Correct letters are also revealed on the main board.',
     hangmanRule4Title: '4. Strictly 5 Attempts Per Chatter',
@@ -301,7 +301,7 @@ export const translations = {
     hotPotatoRule2Title: '2. Rapid Passing (!pass <number>)',
     hotPotatoRule2Desc: 'The active bomb holder must type !pass <number> or !pass @username in chat immediately to pass it to another alive contender.',
     hotPotatoRule3Title: '3. Random Pass Option (!pass)',
-    hotPotatoRule3Desc: 'Typing !pass or !مرر alone without a target tosses the bomb randomly to any surviving player!',
+    hotPotatoRule3Desc: 'Typing !pass alone without a target tosses the bomb randomly to any surviving player!',
     hotPotatoRule4Title: '4. Detonation & Immediate Elimination',
     hotPotatoRule4Desc: 'When the secret fuse expires: BOOM! The bomb detonates on whoever is holding it, eliminating them permanently.',
     hotPotatoRule5Title: '5. Sole Survivor Victory',
@@ -641,8 +641,8 @@ export const translations = {
     typeRule3Desc: 'أول متسابق يكتب الكلمة بدقة في الشات يحسم الجولة لصالحه ويكسب نقطة فورية!',
     typeRule4Title: '4. حساب السرعة بدقة المللي ثانية',
     typeRule4Desc: 'يقوم النظام بحساب زمن كتابة الكلمة من لحظة ظهورها على الشاشة وحتى وصول الرسالة بدقة أجزاء الثانية.',
-    typeRule5Title: '5. هدف الفوز وتتويج البطل',
-    typeRule5Desc: 'أول متسابق يصل إلى عدد النقاط المستهدف (مثلاً 3 أو 5 نقاط) يُتوّج كبطل لسباق سرعة الكتابة!',
+    typeRule5Title: '5. الفوز وتتويج بطل السباق',
+    typeRule5Desc: 'المتسابق الحاصل على أعلى مجموع نقاط بنهاية جميع جولات السباق يُتوّج كبطل لسباق سرعة الكتابة! (وفي حال تعادل النقاط يُحسم الفوز بالزمن الأسرع)',
 
     // Rules Modal - Hangman
     hangmanRulesModalTitle: 'قوانين وطريقة لعب تحدي الكلمة المخفية',

@@ -529,26 +529,89 @@ function getTileThemeClass(tile: IBoardTile) {
       v-if="boardState.status === 'ROUND_END' || boardState.status === 'MATCH_OVER'"
       class="absolute inset-0 z-40 p-6 bg-black/92 backdrop-blur-2xl flex flex-col items-center justify-center space-y-6 text-center animate-fade-in"
     >
-      <div v-if="boardState.status === 'MATCH_OVER'" class="space-y-4">
-        <span class="text-6xl animate-bounce">👑</span>
-        <h2 class="text-3xl sm:text-4xl font-cairo font-black text-amber-400 text-glow-amber">
-          {{ isRtl ? 'تتويج بطل حرب المتاهة (Pummel Maze War)' : 'Pummel Maze War Champion!' }}
-        </h2>
-        <div class="p-6 rounded-3xl bg-black/80 border-2 border-amber-400 shadow-[0_0_50px_rgba(245,158,11,0.5)] max-w-md mx-auto space-y-3">
-          <div class="text-3xl">{{ boardState.teams[boardState.winnerTeamId || 'crimson']?.icon }}</div>
-          <h3 class="text-2xl font-cairo font-black text-white">
-            {{ isRtl ? boardState.teams[boardState.winnerTeamId || 'crimson']?.nameAr : boardState.teams[boardState.winnerTeamId || 'crimson']?.nameEn }}
-          </h3>
-          <div class="flex items-center justify-center gap-4 text-sm font-bold text-amber-300">
-            <span>🏆 {{ boardState.teams[boardState.winnerTeamId || 'crimson']?.trophies }} كؤوس</span>
-            <span>🪙 {{ boardState.teams[boardState.winnerTeamId || 'crimson']?.coins }} عملة</span>
+      <!-- Final Match Over / Grand Teams Scoreboard -->
+      <div v-if="boardState.status === 'MATCH_OVER'" class="space-y-4 max-w-xl w-full">
+        <div class="inline-flex items-center gap-2 px-4 py-1 bg-amber-500/20 text-amber-300 border border-amber-400/50 rounded-full text-xs font-cairo font-black uppercase tracking-widest shadow-glow-gold">
+          🏆 {{ isRtl ? 'لوحة الشرف ونتائج حرب المتاهة النهائية' : 'PUMMEL MAZE WAR FINAL SCOREBOARD' }}
+        </div>
+
+        <!-- Champion Team Card -->
+        <div class="p-5 rounded-2xl bg-black/85 border-2 border-amber-400 shadow-[0_0_50px_rgba(245,158,11,0.5)] flex items-center justify-between gap-4">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="text-4xl shrink-0">{{ boardState.teams[boardState.winnerTeamId || 'crimson']?.icon }}</div>
+            <div :class="isRtl ? 'text-right' : 'text-left'" class="min-w-0">
+              <div class="text-[10px] text-amber-400 font-bold uppercase tracking-wider">
+                {{ isRtl ? 'الفريق البطل الفائز بالمركز الأول 👑' : 'CHAMPION TEAM & 1ST PLACE 👑' }}
+              </div>
+              <div class="text-2xl font-black text-white font-cairo truncate">
+                {{ isRtl ? boardState.teams[boardState.winnerTeamId || 'crimson']?.nameAr : boardState.teams[boardState.winnerTeamId || 'crimson']?.nameEn }}
+              </div>
+              <div class="text-xs text-amber-300 font-mono">
+                👥 {{ boardState.teams[boardState.winnerTeamId || 'crimson']?.membersCount }} {{ isRtl ? 'لاعب في الفريق' : 'team members' }}
+              </div>
+            </div>
+          </div>
+
+          <div class="text-right font-mono shrink-0">
+            <div class="text-base font-black text-amber-300">
+              🏆 {{ boardState.teams[boardState.winnerTeamId || 'crimson']?.trophies }} {{ isRtl ? 'كؤوس' : 'Trophies' }}
+            </div>
+            <div class="text-xs text-yellow-400 font-bold">
+              🪙 {{ boardState.teams[boardState.winnerTeamId || 'crimson']?.coins }} {{ isRtl ? 'عملة' : 'Coins' }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Full Teams Leaderboard Table -->
+        <div class="space-y-1.5" :class="isRtl ? 'text-right' : 'text-left'">
+          <div class="flex items-center justify-between text-xs font-cairo font-bold text-amber-300 px-1">
+            <span>📊 {{ isRtl ? 'ترتيب الفرق النهائي حسب الكؤوس والعملات:' : 'Final Teams Leaderboard & Rankings:' }}</span>
+            <span class="text-[10px] font-mono text-slate-400">{{ rankedTeams.length }} {{ isRtl ? 'فرق' : 'teams' }}</span>
+          </div>
+
+          <div class="space-y-1.5 max-h-52 overflow-y-auto pr-1 scrollbar-thin">
+            <template v-for="(tId, idx) in rankedTeams" :key="tId">
+              <div
+                class="flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs transition-all"
+                :class="[
+                  idx === 0 ? 'bg-amber-950/60 border-amber-400/80 text-white font-bold shadow-[0_0_15px_rgba(245,158,11,0.2)]' :
+                  idx === 1 ? 'bg-slate-800/80 border-slate-600 text-slate-200' :
+                  idx === 2 ? 'bg-amber-950/30 border-amber-800 text-amber-200' :
+                  'bg-slate-950/60 border-slate-800 text-slate-400'
+                ]"
+              >
+                <div class="flex items-center gap-3 min-w-0">
+                  <span class="font-mono font-bold text-xs shrink-0" :class="idx < 3 ? 'text-amber-400' : 'text-slate-500'">
+                    {{ idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}` }}
+                  </span>
+                  <span class="text-2xl">{{ teams?.[tId]?.icon }}</span>
+                  <div class="min-w-0">
+                    <div class="font-cairo font-bold text-white text-sm truncate">
+                      {{ isRtl ? teams?.[tId]?.nameAr : teams?.[tId]?.nameEn }}
+                    </div>
+                    <div class="text-[10px] text-slate-400 font-mono">
+                      {{ teams?.[tId]?.membersCount }} {{ isRtl ? 'مشارك' : 'members' }}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-4 font-mono shrink-0">
+                  <span class="text-amber-300 font-bold">
+                    🏆 {{ teams?.[tId]?.trophies }}
+                  </span>
+                  <span class="px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-300 font-black text-xs">
+                    🪙 {{ teams?.[tId]?.coins }}
+                  </span>
+                </div>
+              </div>
+            </template>
           </div>
         </div>
 
         <button
           v-if="isAdmin"
           type="button"
-          class="px-8 py-3 rounded-full font-cairo font-black text-sm bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-xl hover:brightness-110"
+          class="px-8 py-2.5 rounded-full font-cairo font-black text-xs bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-xl hover:brightness-110 active:scale-95 transition"
           @click="emit('restart-game')"
         >
           🔄 {{ isRtl ? 'بدء مباراة جديدة' : 'Start New Match' }}

@@ -351,6 +351,15 @@ function resumeExistingGame() {
 
 function cancelNewGamePrompt() {
   confirmNewGameModal.value.isOpen = false;
+  const router = useRouter();
+  router.replace({ path: '/dashboard', query: { channel: streamerChannel.value || undefined, platform: selectedPlatform.value || undefined } });
+}
+
+async function deleteOldSessionAndStay() {
+  confirmNewGameModal.value.isOpen = false;
+  const router = useRouter();
+  router.replace({ path: '/dashboard', query: { channel: streamerChannel.value || undefined, platform: selectedPlatform.value || undefined } });
+  await gameStore.deleteCurrentSession();
 }
 
 function onModalConnect(platforms: { id: string; channel: string }[]) {
@@ -467,10 +476,10 @@ function onModalConnect(platforms: { id: string; channel: string }[]) {
         <button
           type="button"
           class="px-3 py-2 text-xs font-bold text-slate-400 hover:text-red-400 transition"
-          :title="isRtl ? 'حذف الجلسة السابقة والبدء من جديد' : 'Discard session'"
-          @click="gameStore.clearStoredSession()"
+          :title="isRtl ? 'حذف الجلسة السابقة والبدء من جديد' : 'Discard and delete session'"
+          @click="gameStore.deleteCurrentSession()"
         >
-          ✕ {{ isRtl ? 'تجاهل' : 'Discard' }}
+          ✕ {{ isRtl ? 'حذف الجلسة القديمة' : 'Discard Session' }}
         </button>
       </div>
     </div>
@@ -755,29 +764,40 @@ function onModalConnect(platforms: { id: string; channel: string }[]) {
         </div>
 
         <!-- Action Buttons -->
-        <div class="flex flex-col sm:flex-row items-center justify-end gap-3 pt-1">
+        <div class="flex flex-wrap items-center justify-end gap-2.5 pt-2">
           <button
             type="button"
-            class="w-full sm:w-auto px-5 py-2.5 rounded-full bg-[#141824] hover:bg-[#1a2030] border border-[#27314a] text-xs font-cairo font-bold text-slate-300 hover:text-white transition-colors cursor-pointer"
+            class="px-4 py-2.5 rounded-full bg-[#141824] hover:bg-[#1a2030] border border-[#27314a] text-xs font-cairo font-bold text-slate-300 hover:text-white transition-colors cursor-pointer"
             @click="cancelNewGamePrompt"
           >
-            {{ isRtl ? 'إلغاء' : 'Cancel' }}
+            {{ isRtl ? 'إغلاق ✕' : 'Close ✕' }}
           </button>
 
           <button
             type="button"
-            class="w-full sm:w-auto px-5 py-2.5 rounded-full bg-emerald-950/80 hover:bg-emerald-900/80 border border-emerald-500/50 text-xs font-cairo font-bold text-emerald-300 hover:text-white transition-colors cursor-pointer"
+            class="px-4 py-2.5 rounded-full bg-rose-950/70 hover:bg-rose-900/90 border border-rose-600/60 text-xs font-cairo font-bold text-rose-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
+            @click="deleteOldSessionAndStay"
+          >
+            <span>🗑️</span>
+            <span>{{ isRtl ? 'لا، حذف اللعبة السابقة نهائياً' : 'No, Delete Previous Game' }}</span>
+          </button>
+
+          <button
+            type="button"
+            class="px-4 py-2.5 rounded-full bg-emerald-950/80 hover:bg-emerald-900/80 border border-emerald-500/50 text-xs font-cairo font-bold text-emerald-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
             @click="resumeExistingGame"
           >
-            {{ isRtl ? 'متابعة اللعبة السابقة ↗️' : 'Resume Previous Game ↗️' }}
+            <span>↗️</span>
+            <span>{{ isRtl ? 'متابعة اللعبة السابقة' : 'Resume Previous Game' }}</span>
           </button>
 
           <button
             type="button"
-            class="w-full sm:w-auto px-6 py-2.5 rounded-full text-xs font-cairo font-black text-white bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 shadow-lg shadow-rose-900/50 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+            class="px-5 py-2.5 rounded-full text-xs font-cairo font-black text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 shadow-lg shadow-indigo-900/50 hover:scale-105 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
             @click="confirmStartNewAndDeleteOld"
           >
-            {{ isRtl ? 'بدء لعبة جديدة وحذف القديمة 🚀' : 'Start New & Delete Old 🚀' }}
+            <span>🚀</span>
+            <span>{{ isRtl ? 'حذف وبدء لعبة جديدة' : 'Start New & Delete Old' }}</span>
           </button>
         </div>
       </div>

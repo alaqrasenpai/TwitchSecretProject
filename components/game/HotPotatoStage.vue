@@ -48,6 +48,26 @@ const currentHolderPlayer = computed(() => {
   return players.value.find((p) => p.number === currentHolderNumber.value) || null;
 });
 
+const sortedContenders = computed(() => {
+  const all = [...players.value];
+  const winUser = winner.value?.username?.toLowerCase();
+  return all.sort((a, b) => {
+    if (winUser && a.username.toLowerCase() === winUser) return -1;
+    if (winUser && b.username.toLowerCase() === winUser) return 1;
+    const aAlive = a.status === 'ALIVE' || a.status === 'REVIVED';
+    const bAlive = b.status === 'ALIVE' || b.status === 'REVIVED';
+    if (aAlive && !bAlive) return -1;
+    if (!aAlive && bAlive) return 1;
+    return a.number - b.number;
+  });
+});
+
+function getPlayerPassStats(username: string) {
+  const clean = username.toLowerCase();
+  const passedCount = recentPasses.value.filter((p) => p.fromUsername?.toLowerCase() === clean).length;
+  return { passedCount };
+}
+
 // Timer countdown & Tick Sound Interval
 const remainingSeconds = ref(25);
 let timerInterval: any = null;
@@ -451,30 +471,50 @@ function handleManualPass(targetNum?: number) {
         </div>
       </div>
 
-      <!-- 4. MATCH OVER / SOLE SURVIVOR VICTORY -->
+      <!-- 4. MATCH OVER / GRAND SCOREBOARD -->
       <div
         v-else-if="status === 'MATCH_OVER' || status === 'FINISHED'"
-        class="text-center space-y-5 max-w-lg mx-auto p-6 sm:p-8 bg-neutral-950/90 rounded-3xl border-2 border-amber-500 shadow-[0_0_60px_rgba(245,158,11,0.6)] backdrop-blur-xl animate-in zoom-in-95 duration-300"
+        class="w-full max-w-2xl mx-auto p-5 sm:p-7 bg-gradient-to-b from-neutral-950 via-neutral-900/98 to-neutral-950 rounded-3xl border-2 border-amber-500/80 shadow-[0_0_60px_rgba(245,158,11,0.5)] backdrop-blur-xl animate-scale-up space-y-4 text-center"
       >
-        <div class="w-24 h-24 mx-auto rounded-3xl bg-gradient-to-tr from-amber-400 via-orange-500 to-yellow-300 flex items-center justify-center text-5xl shadow-[0_0_40px_rgba(245,158,11,0.6)] animate-bounce">
-          👑
+        <div class="inline-flex items-center gap-2 px-4 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-full text-xs font-mono font-black uppercase tracking-wider shadow-glow-gold">
+          👑 {{ isRtl ? 'لوحة الشرف والنتائج النهائية (SCOREBOARD)' : 'FINAL STANDINGS & SURVIVORS' }}
         </div>
 
-        <div class="space-y-2">
-          <span class="px-3 py-1 bg-amber-950 text-amber-300 border border-amber-500 rounded-full text-xs font-mono font-black uppercase tracking-wider">
-            {{ isRtl ? 'بطل القنبلة الموقوتة 👑' : 'HOT POTATO CHAMPION 👑' }}
-          </span>
-          <h2 class="font-cairo font-black text-3xl sm:text-4xl text-white">
-            {{ winner?.displayName || 'Survivor' }}
-          </h2>
-          <p class="text-xs sm:text-sm font-tajawal text-neutral-300">
-            {{ isRtl ? 'صمد أمام جميع الانفجارات وتوج الناجي الأخير من القنبلة الموقوتة!' : 'Survived every blast and outlasted all rivals!' }}
-          </p>
+        <!-- Winner Spotlight -->
+        <div
+          v-if="winner"
+          class="p-4 bg-gradient-to-r from-amber-950/60 via-neutral-900 to-red-950/60 rounded-2xl border border-amber-400/70 flex items-center justify-between gap-3 shadow-glow-gold"
+        >
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="relative shrink-0">
+              <img
+                :src="winner.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${winner.username}`"
+                class="w-14 h-14 rounded-2xl border-2 border-amber-400 shadow-xl"
+              />
+              <span class="absolute -top-2.5 -right-2 text-xl animate-bounce">👑</span>
+            </div>
+            <div :class="isRtl ? 'text-right' : 'text-left'" class="min-w-0">
+              <div class="text-[10px] text-amber-400 font-bold uppercase tracking-wider">
+                {{ isRtl ? 'بطل القنبلة الموقوتة والناجي الأخير' : 'HOT POTATO CHAMPION & SOLE SURVIVOR' }}
+              </div>
+              <div class="text-lg font-black text-white font-cairo truncate">
+                {{ winner.displayName }}
+              </div>
+              <div class="text-xs text-neutral-400 font-mono">@{{ winner.username }}</div>
+            </div>
+          </div>
+
+          <div class="text-right font-mono shrink-0">
+            <span class="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/50 font-black text-xs">
+              {{ isRtl ? 'صامد 🏆' : 'SURVIVOR 🏆' }}
+            </span>
+          </div>
         </div>
 
-        <div class="p-3.5 bg-black/60 rounded-2xl border border-neutral-800 text-xs font-mono text-neutral-400 flex items-center justify-around">
+        <!-- Match Stats Header -->
+        <div class="p-3 bg-black/60 rounded-2xl border border-neutral-800 text-xs font-mono text-neutral-400 flex items-center justify-around">
           <div>
-            <span class="block text-[10px] text-neutral-500">{{ isRtl ? 'الجولات' : 'Rounds' }}</span>
+            <span class="block text-[10px] text-neutral-500">{{ isRtl ? 'الجولات المكتملة' : 'Rounds Completed' }}</span>
             <span class="font-black text-white text-base">{{ roundNumber }}</span>
           </div>
           <div class="h-6 w-px bg-neutral-800" />
@@ -482,14 +522,72 @@ function handleManualPass(targetNum?: number) {
             <span class="block text-[10px] text-neutral-500">{{ isRtl ? 'إجمالي التمريرات' : 'Total Passes' }}</span>
             <span class="font-black text-amber-400 text-base">{{ totalPasses }}</span>
           </div>
+          <div class="h-6 w-px bg-neutral-800" />
+          <div>
+            <span class="block text-[10px] text-neutral-500">{{ isRtl ? 'المتسابقون' : 'Contenders' }}</span>
+            <span class="font-black text-red-400 text-base">{{ players.length }}</span>
+          </div>
+        </div>
+
+        <!-- Full Contenders Survival Leaderboard -->
+        <div class="space-y-1.5" :class="isRtl ? 'text-right' : 'text-left'">
+          <div class="flex items-center justify-between text-xs font-cairo font-bold text-amber-300 px-1">
+            <span>📊 {{ isRtl ? 'ترتيب المتسابقين حسب البقاء والتمرير:' : 'Contenders Leaderboard & Survival:' }}</span>
+            <span class="text-[10px] font-mono text-neutral-500">{{ sortedContenders.length }} {{ isRtl ? 'لاعب' : 'players' }}</span>
+          </div>
+
+          <div class="max-h-52 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin">
+            <template v-for="(p, idx) in sortedContenders" :key="p.username">
+              <div
+                class="flex items-center justify-between px-3 py-2 rounded-xl border text-xs transition-all"
+                :class="[
+                  idx === 0 ? 'bg-amber-950/60 border-amber-400/80 text-white font-bold shadow-[0_0_15px_rgba(245,158,11,0.2)]' :
+                  idx === 1 ? 'bg-neutral-800/80 border-neutral-600 text-neutral-200' :
+                  idx === 2 ? 'bg-amber-950/30 border-amber-800/60 text-amber-200' :
+                  'bg-neutral-950/60 border-neutral-800 text-neutral-400'
+                ]"
+              >
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <span class="font-mono font-bold text-xs shrink-0" :class="idx < 3 ? 'text-amber-400' : 'text-neutral-500'">
+                    {{ idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}` }}
+                  </span>
+                  <img
+                    :src="p.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${p.username}`"
+                    class="w-7 h-7 rounded-full border shrink-0"
+                    :class="p.status === 'ALIVE' || p.status === 'REVIVED' ? 'border-amber-400/70' : 'border-red-900/60 grayscale'"
+                  />
+                  <div class="min-w-0">
+                    <div class="font-cairo font-bold text-white truncate flex items-center gap-1.5">
+                      <span>{{ p.displayName }}</span>
+                      <span class="text-[10px] text-neutral-400 font-mono">@{{ p.username }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2 font-mono shrink-0">
+                  <span v-if="getPlayerPassStats(p.username).passedCount > 0" class="text-[10px] text-amber-300 font-bold">
+                    {{ getPlayerPassStats(p.username).passedCount }} {{ isRtl ? 'تمريرة' : 'passes' }}
+                  </span>
+                  <span
+                    class="px-2 py-0.5 rounded text-[9px] font-bold uppercase border"
+                    :class="p.status === 'ALIVE' || p.status === 'REVIVED'
+                      ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50'
+                      : 'bg-red-950 text-red-400 border-red-500/50'"
+                  >
+                    {{ p.status === 'ALIVE' || p.status === 'REVIVED' ? (isRtl ? 'صامد 🏆' : 'ALIVE 🏆') : (isRtl ? 'انفجر 💥' : 'BLASTED 💥') }}
+                  </span>
+                </div>
+              </div>
+            </template>
+          </div>
         </div>
 
         <div v-if="isAdmin" class="pt-2">
           <GamerButton
-            size="lg"
+            size="md"
             variant="primary"
             rounded="full"
-            class="w-full shadow-glow-crimson font-black text-base py-3 !bg-gradient-to-r !from-red-600 !to-amber-600 hover:!brightness-110"
+            class="w-full shadow-glow-crimson font-black text-sm py-2.5 !bg-gradient-to-r !from-red-600 !to-amber-600 hover:!brightness-110"
             @click="emit('restartGame')"
           >
             ↺ {{ isRtl ? 'إعادة اللعبة من جديد' : 'Play Another Match' }}

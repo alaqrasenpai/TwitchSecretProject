@@ -6,6 +6,7 @@ const props = withDefaults(
   defineProps<{
     timerEndsAt: string | Date | null;
     totalDurationSeconds?: number;
+    durationSeconds?: number;
     active?: boolean;
   }>(),
   {
@@ -19,24 +20,44 @@ const emit = defineEmits<{
 }>();
 
 const { playCountdownPulse } = useAudioSfx();
-const { t } = useTranslation();
+const { t, isRtl } = useTranslation();
 
-const timeLeftSeconds = ref(props.totalDurationSeconds);
+const effectiveDuration = computed(() => {
+  if (props.durationSeconds !== undefined) return props.durationSeconds;
+  return props.totalDurationSeconds || 15;
+});
+
+const isUnlimited = computed(() => effectiveDuration.value === 0);
+
+const timeLeftSeconds = ref(effectiveDuration.value);
 let intervalId: any = null;
 let lastPlayedSecond = -1;
 
 const progressPercent = computed(() => {
-  return Math.max(0, Math.min(100, (timeLeftSeconds.value / props.totalDurationSeconds) * 100));
+  if (isUnlimited.value) return 100;
+  if (effectiveDuration.value <= 0) return 100;
+  return Math.max(0, Math.min(100, (timeLeftSeconds.value / effectiveDuration.value) * 100));
 });
 
-const isWarning = computed(() => timeLeftSeconds.value <= 5 && timeLeftSeconds.value > 0);
-const isUrgent = computed(() => timeLeftSeconds.value <= 3 && timeLeftSeconds.value > 0);
+const isWarning = computed(() => !isUnlimited.value && timeLeftSeconds.value <= 5 && timeLeftSeconds.value > 0);
+const isUrgent = computed(() => !isUnlimited.value && timeLeftSeconds.value <= 3 && timeLeftSeconds.value > 0);
 
 watch(
   () => props.timerEndsAt,
   () => {
     lastPlayedSecond = -1;
     updateTime();
+  }
+);
+
+watch(
+  effectiveDuration,
+  (newDur) => {
+    if (isUnlimited.value) {
+      timeLeftSeconds.value = 0;
+    } else if (!props.timerEndsAt) {
+      timeLeftSeconds.value = newDur;
+    }
   }
 );
 
@@ -50,8 +71,13 @@ onUnmounted(() => {
 });
 
 function updateTime() {
+  if (isUnlimited.value) {
+    timeLeftSeconds.value = 0;
+    return;
+  }
+
   if (!props.timerEndsAt || !props.active) {
-    timeLeftSeconds.value = props.totalDurationSeconds;
+    timeLeftSeconds.value = effectiveDuration.value;
     return;
   }
 
@@ -101,7 +127,12 @@ function updateTime() {
           isUrgent ? 'text-arena-crimson text-glow-crimson' : isWarning ? 'text-red-300' : 'text-white'
         ]"
       >
-        {{ String(timeLeftSeconds).padStart(2, '0') }} {{ t('secondsRemaining') }}
+        <template v-if="isUnlimited">
+          {{ isRtl ? '♾️ غير محدود' : '♾️ Unlimited' }}
+        </template>
+        <template v-else>
+          {{ String(timeLeftSeconds).padStart(2, '0') }} {{ t('secondsRemaining') }}
+        </template>
       </span>
     </div>
 

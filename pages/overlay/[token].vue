@@ -18,7 +18,9 @@ import GamerBadge from '~/components/common/GamerBadge.vue';
 import CombatEventNotification from '~/components/game/CombatEventNotification.vue';
 
 definePageMeta({
-  layout: 'overlay'
+  layout: 'overlay',
+  pageTransition: false,
+  layoutTransition: false
 });
 
 const route = useRoute();
@@ -48,6 +50,22 @@ const activePlayerReviveAlreadyUsed = computed(() => {
 });
 const winner = computed(() => session.value?.winner || null);
 const status = computed(() => session.value?.status || 'LOBBY');
+
+const rankedOverlayPlayers = computed(() => {
+  const winUser = winner.value?.username?.toLowerCase();
+  return [...players.value].sort((a, b) => {
+    if (winUser && a.username.toLowerCase() === winUser) return -1;
+    if (winUser && b.username.toLowerCase() === winUser) return 1;
+    const aAlive = a.status === 'ALIVE' || a.status === 'REVIVED';
+    const bAlive = b.status === 'ALIVE' || b.status === 'REVIVED';
+    if (aAlive && !bAlive) return -1;
+    if (!aAlive && bAlive) return 1;
+    const killsA = a.killsCount || 0;
+    const killsB = b.killsCount || 0;
+    if (killsB !== killsA) return killsB - killsA;
+    return a.number - b.number;
+  });
+});
 
 watch(
   () => session.value?.status,
@@ -297,25 +315,96 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Victory Banner Overlay (Roulette) -->
+      <!-- Grand Roulette Combat Scoreboard Overlay -->
       <div
         v-if="status === 'FINISHED' && winner && session?.gameType === 'ROULETTE'"
-        class="absolute inset-0 flex items-center justify-center bg-arena-dark/90 backdrop-blur-xl rounded-3xl border-2 border-arena-crimson shadow-glow-crimson z-30 animate-pulse p-8"
+        class="absolute inset-0 flex items-center justify-center bg-arena-dark/95 backdrop-blur-2xl rounded-3xl border-2 border-arena-crimson shadow-glow-crimson z-30 p-6 animate-scale-up"
       >
-        <div class="text-center space-y-4">
-          <div class="text-sm font-cairo text-arena-crimson font-bold uppercase tracking-widest">
-            {{ t('championDeclared') }}
+        <div class="max-w-xl w-full text-center space-y-4">
+          <div class="inline-flex items-center gap-2 px-4 py-1 bg-red-500/20 text-red-300 border border-red-500/40 rounded-full text-xs font-cairo font-black uppercase tracking-widest shadow-glow-crimson">
+            🏆 {{ isRtl ? 'لوحة الشرف ونتائج المعركة النهائية' : 'ROULETTE COMBAT SCOREBOARD' }}
           </div>
-          <img
-            :src="winner.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${winner.username}`"
-            class="w-24 h-24 mx-auto rounded-full border-4 border-arena-crimson shadow-glow-crimson"
-          />
-          <h2 class="font-cairo font-black text-5xl text-white">
-            #{{ winner.number }} // {{ winner.displayName }}
-          </h2>
-          <p class="font-tajawal text-lg text-red-200">
-            {{ t('totalKills') }}: <strong>{{ winner.killsCount || 0 }}</strong>
-          </p>
+
+          <!-- Winner Spotlight Card -->
+          <div class="p-4 bg-gradient-to-r from-red-950/80 via-neutral-900 to-amber-950/80 rounded-2xl border border-red-500/60 flex items-center justify-between gap-4 shadow-glow-crimson">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="relative shrink-0">
+                <img
+                  :src="winner.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${winner.username}`"
+                  class="w-16 h-16 rounded-full border-3 border-amber-400 shadow-glow-crimson"
+                />
+                <span class="absolute -top-2.5 -right-2 text-xl animate-bounce">👑</span>
+              </div>
+              <div :class="isRtl ? 'text-right' : 'text-left'" class="min-w-0">
+                <div class="text-[10px] text-amber-400 font-bold uppercase tracking-wider">
+                  {{ t('championDeclared') }} • {{ t('soleSurvivor') }}
+                </div>
+                <div class="text-2xl font-black text-white font-cairo truncate">
+                  #{{ winner.number }} // {{ winner.displayName }}
+                </div>
+                <div class="text-xs text-red-300 font-mono">@{{ winner.username }}</div>
+              </div>
+            </div>
+
+            <div class="text-right font-mono shrink-0">
+              <span class="px-3 py-1 rounded-full bg-red-500/20 text-red-300 border border-red-500/50 font-black text-sm">
+                🎯 {{ winner.killsCount || 0 }} {{ t('totalKills') }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Full Combat Rankings Table -->
+          <div class="space-y-1.5" :class="isRtl ? 'text-right' : 'text-left'">
+            <div class="flex items-center justify-between text-xs font-cairo font-bold text-red-300 px-1">
+              <span>📊 {{ isRtl ? 'ترتيب المتسابقين حسب البقاء والقتلات:' : 'Contenders Leaderboard & Kills:' }}</span>
+              <span class="text-[10px] font-mono text-slate-400">{{ rankedOverlayPlayers.length }} {{ isRtl ? 'لاعب' : 'players' }}</span>
+            </div>
+
+            <div class="max-h-56 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin">
+              <template v-for="(p, idx) in rankedOverlayPlayers" :key="p.username">
+                <div
+                  class="flex items-center justify-between px-3 py-2 rounded-xl border text-xs transition-all"
+                  :class="[
+                    idx === 0 ? 'bg-red-950/70 border-amber-400/80 text-white font-bold shadow-[0_0_15px_rgba(239,68,68,0.3)]' :
+                    idx === 1 ? 'bg-neutral-800/80 border-neutral-600 text-neutral-200' :
+                    idx === 2 ? 'bg-red-950/30 border-red-800 text-red-200' :
+                    'bg-neutral-950/60 border-neutral-800 text-neutral-400'
+                  ]"
+                >
+                  <div class="flex items-center gap-2.5 min-w-0">
+                    <span class="font-mono font-bold text-xs shrink-0" :class="idx < 3 ? 'text-amber-400' : 'text-neutral-500'">
+                      {{ idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}` }}
+                    </span>
+                    <img
+                      :src="p.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${p.username}`"
+                      class="w-7 h-7 rounded-full border shrink-0"
+                      :class="p.status === 'ALIVE' || p.status === 'REVIVED' ? 'border-red-400' : 'border-red-900/60 grayscale'"
+                    />
+                    <div class="min-w-0">
+                      <div class="font-cairo font-bold text-white truncate flex items-center gap-1.5">
+                        <span>#{{ p.number }}</span>
+                        <span class="truncate">{{ p.displayName }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center gap-2 font-mono shrink-0">
+                    <span class="text-[10px] text-red-300 font-bold">
+                      🎯 {{ p.killsCount || 0 }}
+                    </span>
+                    <span
+                      class="px-2 py-0.5 rounded text-[9px] font-bold uppercase border"
+                      :class="p.status === 'ALIVE' || p.status === 'REVIVED'
+                        ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50'
+                        : 'bg-red-950 text-red-400 border-red-500/50'"
+                    >
+                      {{ p.status === 'ALIVE' || p.status === 'REVIVED' ? (isRtl ? 'صامد 🏆' : 'ALIVE 🏆') : (isRtl ? 'مستبعد 💀' : 'OUT 💀') }}
+                    </span>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
         </div>
       </div>
     </div>

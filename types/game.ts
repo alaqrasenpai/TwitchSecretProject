@@ -487,6 +487,7 @@ export type GameActionType =
   | 'PAUSE_GAME'
   | 'RESUME_GAME'
   | 'RESET_GAME'
+  | 'END_GAME'
   | 'UPDATE_SETTINGS'
   | 'KICK_PLAYER'
   | 'FORCE_WINNER'

@@ -20,6 +20,12 @@ onMounted(async () => {
 
 <template>
   <div class="bg-brand-onyx min-h-screen text-brand-textMain">
+    <NuxtLoadingIndicator
+      color="repeating-linear-gradient(to right, #6366f1 0%, #a855f7 50%, #38bdf8 100%)"
+      :height="3"
+      :duration="1600"
+      :throttle="0"
+    />
     <NuxtLayout>
       <NuxtPage />
     </NuxtLayout>

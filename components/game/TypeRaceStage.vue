@@ -205,7 +205,7 @@ function submitManualWord() {
           <div class="text-[11px] font-tajawal text-arena-textMuted flex items-center gap-2">
             <span>{{ isRtl ? `الجولة ${currentRound} من ${totalRounds}` : `Round ${currentRound} of ${totalRounds}` }}</span>
             <span>•</span>
-            <span class="text-amber-400 font-bold">{{ isRtl ? `هدف الفوز: ${targetScore} نقاط` : `Target: ${targetScore} Points` }}</span>
+            <span class="text-amber-400 font-bold">{{ isRtl ? 'الأعلى نقاطاً يفوز 🏆' : 'Highest Score Wins 🏆' }}</span>
           </div>
         </div>
       </div>
@@ -413,7 +413,7 @@ function submitManualWord() {
 
         <!-- Automatic Round Transition Bar -->
         <div class="p-2.5 bg-amber-950/70 border border-amber-500/50 rounded-2xl text-xs font-bold text-amber-200 flex items-center justify-between px-4">
-          <span>🔄 {{ isRtl ? `الانتقال للجولة التالية تلقائياً خلال:` : `Next round starting in:` }}</span>
+          <span>🔄 {{ isRtl ? (currentRound >= totalRounds ? 'الانتقال للنتائج النهائية تلقائياً خلال:' : 'الانتقال للجولة التالية تلقائياً خلال:') : (currentRound >= totalRounds ? 'Final results starting in:' : 'Next round starting in:') }}</span>
           <span class="font-mono font-black text-base text-amber-300">{{ autoAdvanceSeconds }}s</span>
         </div>
 
@@ -425,7 +425,7 @@ function submitManualWord() {
             class="shadow-glow-gold font-black text-xs px-6 py-2 !bg-gradient-to-r !from-amber-500 !to-orange-600 hover:!brightness-110"
             @click="stopAutoAdvance(); $emit('nextRound');"
           >
-            ⏭️ {{ isRtl ? 'تجاوز والبدء فوراً' : 'Skip & Start Now' }}
+            {{ currentRound >= totalRounds ? (isRtl ? '🏆 عرض لوحة النتائج النهائية' : '🏆 View Final Scoreboard') : (isRtl ? '⏭️ تجاوز والبدء فوراً' : '⏭️ Skip & Start Now') }}
           </GamerButton>
         </div>
       </div>

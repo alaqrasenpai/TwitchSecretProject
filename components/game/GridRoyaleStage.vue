@@ -22,6 +22,19 @@ const players = computed(() => props.session.players || []);
 const alivePlayers = computed(() => players.value.filter((p) => p.status === 'ALIVE' || p.status === 'REVIVED'));
 const eliminatedPlayers = computed(() => players.value.filter((p) => p.status === 'ELIMINATED'));
 
+const sortedGridContenders = computed(() => {
+  const winUser = gridState.value?.winner?.username?.toLowerCase();
+  return [...players.value].sort((a, b) => {
+    if (winUser && a.username.toLowerCase() === winUser) return -1;
+    if (winUser && b.username.toLowerCase() === winUser) return 1;
+    const aAlive = a.status === 'ALIVE' || a.status === 'REVIVED';
+    const bAlive = b.status === 'ALIVE' || b.status === 'REVIVED';
+    if (aAlive && !bAlive) return -1;
+    if (!aAlive && bAlive) return 1;
+    return a.number - b.number;
+  });
+});
+
 const rowLetters = ['A', 'B', 'C', 'D'];
 const colNumbers = ['1', '2', '3', '4'];
 
@@ -221,32 +234,93 @@ function getTileStatusClass(tile: IGridRoyaleTile) {
       v-if="gridState.status === 'MATCH_OVER' || gridState.status === 'ROUND_SUMMARY'"
       class="absolute inset-0 z-40 p-6 bg-black/92 backdrop-blur-2xl flex flex-col items-center justify-center space-y-5 text-center animate-fade-in"
     >
-      <!-- Match Champion Reveal -->
-      <div v-if="gridState.status === 'MATCH_OVER' && gridState.winner" class="space-y-4 max-w-md">
-        <span class="text-6xl animate-bounce">👑</span>
-        <h2 class="text-2xl sm:text-4xl font-cairo font-black text-amber-400 text-glow-amber">
-          {{ isRtl ? 'بطل حلبة البقاء (Grid Royale Champion)!' : 'Grid Royale Champion!' }}
-        </h2>
-        <div class="p-5 rounded-3xl bg-black/80 border-2 border-amber-400 shadow-[0_0_50px_rgba(245,158,11,0.6)] flex items-center justify-center gap-4">
-          <img
-            :src="gridState.winner.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${gridState.winner.username}`"
-            class="w-16 h-16 rounded-full border-3 border-amber-400 shadow-xl"
-          />
-          <div class="text-right">
-            <h3 class="text-xl font-cairo font-black text-white leading-tight">
-              {{ gridState.winner.displayName }}
-            </h3>
-            <span class="text-xs font-mono text-amber-300">@{{ gridState.winner.username }}</span>
-            <div class="text-xs text-slate-300 mt-1">
-              🏆 {{ isRtl ? 'الناجي الأخير وصاحب أسرع ردة فعل!' : 'Sole Survivor & Fastest Reflex!' }}
+      <!-- Match Champion & Grand Scoreboard Reveal -->
+      <div v-if="gridState.status === 'MATCH_OVER' && gridState.winner" class="space-y-4 max-w-xl w-full">
+        <div class="inline-flex items-center gap-2 px-4 py-1 bg-amber-500/20 text-amber-300 border border-amber-400/50 rounded-full text-xs font-cairo font-black uppercase tracking-widest shadow-glow-gold">
+          👑 {{ isRtl ? 'لوحة الشرف ونتائج البقاء النهائية (SCOREBOARD)' : 'GRID ROYALE FINAL SCOREBOARD' }}
+        </div>
+
+        <div class="p-4 rounded-2xl bg-black/80 border-2 border-amber-400 shadow-[0_0_50px_rgba(245,158,11,0.5)] flex items-center justify-between gap-4">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="relative shrink-0">
+              <img
+                :src="gridState.winner.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${gridState.winner.username}`"
+                class="w-14 h-14 rounded-2xl border-2 border-amber-400 shadow-xl"
+              />
+              <span class="absolute -top-2.5 -right-2 text-xl animate-bounce">👑</span>
             </div>
+            <div :class="isRtl ? 'text-right' : 'text-left'" class="min-w-0">
+              <div class="text-[10px] text-amber-400 font-bold uppercase tracking-wider">
+                {{ isRtl ? 'بطل حلبة البقاء والناجي الأخير' : 'GRID ROYALE SOLE SURVIVOR' }}
+              </div>
+              <div class="text-xl font-black text-white font-cairo truncate">
+                {{ gridState.winner.displayName }}
+              </div>
+              <div class="text-xs text-amber-300/80 font-mono">@{{ gridState.winner.username }}</div>
+            </div>
+          </div>
+
+          <div class="text-right font-mono shrink-0">
+            <span class="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/50 font-black text-xs">
+              {{ isRtl ? 'صامد 🏆' : 'SURVIVOR 🏆' }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Full Contenders Standings Table -->
+        <div class="space-y-1.5" :class="isRtl ? 'text-right' : 'text-left'">
+          <div class="flex items-center justify-between text-xs font-cairo font-bold text-cyan-300 px-1">
+            <span>📊 {{ isRtl ? 'ترتيب المتسابقين حسب البقاء في المربعات:' : 'Contenders Survival Leaderboard:' }}</span>
+            <span class="text-[10px] font-mono text-slate-400">{{ sortedGridContenders.length }} {{ isRtl ? 'لاعب' : 'players' }}</span>
+          </div>
+
+          <div class="max-h-52 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin">
+            <template v-for="(p, idx) in sortedGridContenders" :key="p.username">
+              <div
+                class="flex items-center justify-between px-3 py-2 rounded-xl border text-xs transition-all"
+                :class="[
+                  idx === 0 ? 'bg-amber-950/60 border-amber-400/80 text-white font-bold shadow-[0_0_15px_rgba(245,158,11,0.2)]' :
+                  idx === 1 ? 'bg-slate-800/80 border-slate-600 text-slate-200' :
+                  idx === 2 ? 'bg-cyan-950/40 border-cyan-800 text-cyan-200' :
+                  'bg-slate-950/60 border-slate-800 text-slate-400'
+                ]"
+              >
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <span class="font-mono font-bold text-xs shrink-0" :class="idx < 3 ? 'text-amber-400' : 'text-slate-500'">
+                    {{ idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}` }}
+                  </span>
+                  <img
+                    :src="p.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${p.username}`"
+                    class="w-7 h-7 rounded-full border shrink-0"
+                    :class="p.status === 'ALIVE' || p.status === 'REVIVED' ? 'border-cyan-400' : 'border-red-900/60 grayscale'"
+                  />
+                  <div class="min-w-0">
+                    <div class="font-cairo font-bold text-white truncate flex items-center gap-1.5">
+                      <span>#{{ p.number }}</span>
+                      <span class="truncate">{{ p.displayName }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2 font-mono shrink-0">
+                  <span
+                    class="px-2 py-0.5 rounded text-[9px] font-bold uppercase border"
+                    :class="p.status === 'ALIVE' || p.status === 'REVIVED'
+                      ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50'
+                      : 'bg-red-950 text-red-400 border-red-500/50'"
+                  >
+                    {{ p.status === 'ALIVE' || p.status === 'REVIVED' ? (isRtl ? 'صامد 🏆' : 'SURVIVED 🏆') : (isRtl ? 'سقط بالعاصفة 💀' : 'COLLAPSED 💀') }}
+                  </span>
+                </div>
+              </div>
+            </template>
           </div>
         </div>
 
         <button
           v-if="isAdmin"
           type="button"
-          class="px-8 py-3 rounded-full font-cairo font-black text-sm bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-xl hover:brightness-110"
+          class="px-8 py-2.5 rounded-full font-cairo font-black text-xs bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-xl hover:brightness-110 active:scale-95 transition"
           @click="emit('restart-game')"
         >
           🔄 {{ isRtl ? 'بدء جولة جديدة' : 'Start New Match' }}

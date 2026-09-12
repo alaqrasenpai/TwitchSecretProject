@@ -28,6 +28,7 @@ import PlatformConnectModal from '~/components/game/PlatformConnectModal.vue';
 import CombatEventNotification from '~/components/game/CombatEventNotification.vue';
 import ChannelVerifyModal from '~/components/game/ChannelVerifyModal.vue';
 import ConfirmModal from '~/components/common/ConfirmModal.vue';
+import confetti from 'canvas-confetti';
 
 definePageMeta({
   layout: 'game'
@@ -62,6 +63,47 @@ const isSidebarOpen = ref(true);
 const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1200);
 const windowHeight = ref(typeof window !== 'undefined' ? window.innerHeight : 900);
 
+const activeSubwayFilter = ref<'ALL' | 'ALIVE' | 'ELIMINATED'>('ALL');
+const subwayContenders = computed(() => {
+  const stateContenders = gameStore.currentSession?.subwayRunnerState?.contenders || {};
+  return gameStore.players.map((p) => {
+    const cont = stateContenders[p.username.toLowerCase()];
+    return {
+      username: p.username,
+      displayName: p.displayName,
+      avatarUrl: p.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${p.username}`,
+      number: p.number,
+      hearts: cont ? cont.hearts : (p.status === 'ELIMINATED' ? 0 : 3),
+      status: cont ? cont.status : p.status,
+      score: cont ? cont.score : (p.score || 0),
+      successfulDodges: cont ? cont.successfulDodges : 0,
+      lastReactionMs: cont?.lastReactionMs
+    };
+  });
+});
+
+const filteredSubwayContenders = computed(() => {
+  if (activeSubwayFilter.value === 'ALIVE') return subwayContenders.value.filter((c) => c.status === 'ALIVE');
+  if (activeSubwayFilter.value === 'ELIMINATED') return subwayContenders.value.filter((c) => c.status === 'ELIMINATED');
+  return subwayContenders.value;
+});
+
+const rankedRoulettePlayers = computed(() => {
+  const winUser = gameStore.winner?.username?.toLowerCase();
+  return [...gameStore.players].sort((a, b) => {
+    if (winUser && a.username.toLowerCase() === winUser) return -1;
+    if (winUser && b.username.toLowerCase() === winUser) return 1;
+    const aAlive = a.status === 'ALIVE' || a.status === 'REVIVED';
+    const bAlive = b.status === 'ALIVE' || b.status === 'REVIVED';
+    if (aAlive && !bAlive) return -1;
+    if (!aAlive && bAlive) return 1;
+    const killsA = a.killsCount || 0;
+    const killsB = b.killsCount || 0;
+    if (killsB !== killsA) return killsB - killsA;
+    return a.number - b.number;
+  });
+});
+
 const activePlayer = computed(() => gameStore.activePlayer);
 const activePlayerCanRevive = computed(() => {
   if (!gameStore.activePlayer) return false;
@@ -74,6 +116,23 @@ const activePlayerReviveAlreadyUsed = computed(() => {
   return (gameStore.activePlayer.revivesUsed || 0) >= 1;
 });
 const winner = computed(() => gameStore.winner);
+
+const targetableAlivePlayers = computed(() => {
+  if (!gameStore.activePlayer) return [];
+  return gameStore.players.filter(
+    (p) => p.number !== gameStore.activePlayer!.number && (p.status === 'ALIVE' || p.status === 'REVIVED')
+  );
+});
+
+const revivableTargetPlayers = computed(() => {
+  return gameStore.players.filter(
+    (p) => p.status === 'ELIMINATED' && (p.timesRevived || 0) === 0
+  );
+});
+
+async function onTimerTimeout() {
+  await gameStore.performAction('TIMEOUT_PASS');
+}
 
 // Dynamic responsive wheel sizing based on viewport width & height
 const dynamicWheelSize = computed(() => {
@@ -138,10 +197,28 @@ onMounted(async () => {
   });
 
   // Connect to streamer's Twitch IRC chat channel
-  const targetChannel = gameStore.currentSession?.streamerUsername || 'streamer';
+  const savedChannel = typeof window !== 'undefined'
+    ? (localStorage.getItem('chatwar_streamer_channel') || localStorage.getItem('twitch_channel') || '')
+    : '';
+  const sessionChan = gameStore.currentSession?.streamerUsername;
+  const targetChannel = (sessionChan && sessionChan !== 'streamer')
+    ? sessionChan
+    : (savedChannel || sessionChan || 'streamer');
+
+  // Persist established channel in localStorage so all pages remember it
+  if (targetChannel && targetChannel !== 'streamer' && typeof window !== 'undefined') {
+    localStorage.setItem('chatwar_streamer_channel', targetChannel);
+    localStorage.setItem('twitch_channel', targetChannel);
+  }
+
   customChannelInput.value = targetChannel;
   connectedPlatforms.value = [{ id: 'twitch', channel: targetChannel }];
   connectTwitch(targetChannel);
+
+  // Sync with server if server had default fallback but client has the saved channel
+  if (targetChannel && targetChannel !== 'streamer' && sessionChan === 'streamer') {
+    gameStore.performAction('UPDATE_SETTINGS', { streamerUsername: targetChannel });
+  }
 });
 
 let syncInterval: any = null;
@@ -170,13 +247,23 @@ function connectTwitch(channel: string) {
   twitchChat.connectToChannel(clean, handleChatCommand);
 }
 
-function handleMultiPlatformConnect(platforms: { id: string; channel: string }[], autoConnect: boolean) {
+async function handleMultiPlatformConnect(platforms: { id: string; channel: string }[], autoConnect: boolean) {
   connectedPlatforms.value = platforms;
   const twitchPlat = platforms.find((p) => p.id === 'twitch');
-  if (twitchPlat && twitchPlat.channel) {
-    connectTwitch(twitchPlat.channel);
-  } else if (platforms.length > 0 && platforms[0].channel) {
-    connectTwitch(platforms[0].channel);
+  const primaryChannel = twitchPlat?.channel?.trim() || (platforms.length > 0 ? platforms[0].channel?.trim() : '');
+  if (primaryChannel) {
+    customChannelInput.value = primaryChannel;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('chatwar_streamer_channel', primaryChannel);
+      localStorage.setItem('twitch_channel', primaryChannel);
+    }
+    connectTwitch(primaryChannel);
+
+    if (gameStore.currentSession && gameStore.currentSession.streamerUsername !== primaryChannel) {
+      await gameStore.performAction('UPDATE_SETTINGS', {
+        streamerUsername: primaryChannel
+      });
+    }
   }
 }
 
@@ -386,6 +473,51 @@ function handleChatCommand(
     }
   }
 
+  // 9. ROULETTE DIRECT NUMBER KILL & ACTIONS:
+  // If in Roulette and in WAITING_ACTION phase, the active player whose turn it is
+  // can eliminate simply by typing the target number directly (e.g. "5", "#5", "٥", "رقم 5", "kill 5", "قتل 5")
+  if (!gameStore.currentSession.gameType || gameStore.currentSession.gameType === 'ROULETTE') {
+    const activePl = gameStore.activePlayer;
+    if (activePl && gameStore.currentSession.status === 'WAITING_ACTION') {
+      const isCurrentTurn = user.username.toLowerCase() === activePl.username.toLowerCase();
+      if (isCurrentTurn) {
+        const rawText = (rawMessage || [cmd, ...args].join(' ')).trim();
+        // Convert Arabic numerals to standard digits (e.g. ٥ -> 5)
+        const normalizedMsg = rawText.replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+
+        // Check if message is a direct number or prefixed/suffixed: "5", "#5", "!5", "رقم 5", "player 5", "5!"
+        const directNumMatch = normalizedMsg.match(/^(?:#|!|رقم\s*|player\s*)?(\d+)(?:!|#)?$/i);
+        // Check if message is kill text: "kill 5", "!kill 5", "قتل 5", "!قتل 5", "استبعاد 5", "طرد 5"
+        const textKillMatch = normalizedMsg.match(/^(?:!kill|kill|!قتل|قتل|!طرد|طرد|!استبعاد|استبعاد)\s*(?:#)?(\d+)$/i);
+
+        const matchedKillNum = directNumMatch ? directNumMatch[1] : (textKillMatch ? textKillMatch[1] : null);
+        if (matchedKillNum) {
+          const targetNum = parseInt(matchedKillNum, 10);
+          if (!isNaN(targetNum) && targetNum !== activePl.number) {
+            gameStore.performAction('ACTION_KILL', {
+              actorUsername: user.username,
+              targetNumber: targetNum
+            });
+            return;
+          }
+        }
+
+        // Check if active player wants to revive: "revive 2", "!revive 2", "انعاش 2", "إنعاش 2", "احياء 2"
+        const textReviveMatch = normalizedMsg.match(/^(?:!revive|revive|!انعاش|انعاش|!إنعاش|إنعاش|!احياء|احياء)\s*(?:#)?(\d+)$/i);
+        if (textReviveMatch) {
+          const targetNum = parseInt(textReviveMatch[1], 10);
+          if (!isNaN(targetNum)) {
+            gameStore.performAction('ACTION_REVIVE', {
+              actorUsername: user.username,
+              targetNumber: targetNum
+            });
+            return;
+          }
+        }
+      }
+    }
+  }
+
   const joinList = custom?.join || ['!join', '!دخول', '!انضمام', '!شارك'];
   const killList = custom?.kill || ['!kill', '!قتل', '!استبعاد', '!طرد'];
   const reviveList = custom?.revive || ['!revive', '!انعاش', '!إنعاش', '!احياء'];
@@ -479,10 +611,15 @@ function openConfirm(options: {
   };
 }
 
-function handleModalConfirm() {
+async function handleModalConfirm() {
+  const cb = confirmModalState.value.onConfirm;
   confirmModalState.value.isOpen = false;
-  if (confirmModalState.value.onConfirm) {
-    confirmModalState.value.onConfirm();
+  if (cb) {
+    try {
+      await cb();
+    } catch (e) {
+      console.error('[Room] Modal confirm action failed:', e);
+    }
   }
 }
 
@@ -540,6 +677,37 @@ function promptStartNewGame() {
   });
 }
 
+async function saveGameSettings(newSettings: Partial<IGameSettings>) {
+  try {
+    await gameStore.updateSettings(newSettings);
+  } finally {
+    showSettingsModal.value = false;
+  }
+}
+
+function promptEndGame() {
+  openConfirm({
+    title: isRtl.value ? 'إنهاء اللعبة الحالية' : 'End Current Game',
+    message: isRtl.value
+      ? 'هل أنت متأكد من إنهاء اللعبة الحالية الآن وحسم النتيجة وعرض لوحة الشرف والنتائج (Scoreboard)؟'
+      : 'Are you sure you want to end the current match and display the final scoreboard?',
+    confirmText: isRtl.value ? 'نعم، إنهاء اللعبة 🛑' : 'Yes, End Game 🛑',
+    cancelText: isRtl.value ? 'متابعة اللعب' : 'Keep Playing',
+    variant: 'danger',
+    onConfirm: async () => {
+      await gameStore.performAction('END_GAME');
+      audio.playVictoryFanfare();
+      if (typeof window !== 'undefined') {
+        confetti({
+          particleCount: 90,
+          spread: 80,
+          origin: { y: 0.6 }
+        });
+      }
+    }
+  });
+}
+
 async function handleTriviaCategorySave(config: { categories: string[]; totalQuestions: number; timeLimitSeconds: number; triviaLanguage?: 'AR' | 'EN' | 'BOTH' }) {
   await gameStore.performAction('UPDATE_SETTINGS', {
     settings: {
@@ -560,44 +728,6 @@ async function handleTriviaCategorySave(config: { categories: string[]; totalQue
   <div class="h-screen max-h-screen bg-arena-bg text-arena-textMain px-3 sm:px-5 py-3 flex flex-col justify-between gap-3 overflow-hidden select-none" :dir="isRtl ? 'rtl' : 'ltr'">
     <!-- Combat Event Animation Notification (Kill & Revive) -->
     <CombatEventNotification :latest-log="gameStore.currentSession?.logs?.[0] || null" />
-
-    <!-- Modals -->
-    <GameRulesModal
-      :is-open="showRulesModal"
-      :game-type="gameStore.currentSession?.gameType || 'ROULETTE'"
-      @close="showRulesModal = false"
-    />
-    <GameSettingsModal
-      :is-open="showSettingsModal"
-      :settings="gameStore.currentSession?.settings || { maxPlayers: 30, turnTimeLimitSeconds: 15, allowRevives: true }"
-      @close="showSettingsModal = false"
-      @save="saveGameSettings"
-    />
-    <PlatformConnectModal
-      :is-open="showPlatformModal"
-      :initial-channel="customChannelInput"
-      :initial-platforms="connectedPlatforms"
-      @close="showPlatformModal = false"
-      @connect="handleMultiPlatformConnect"
-    />
-    <ChannelVerifyModal
-      :is-open="showVerifyModal"
-      :channel-name="customChannelInput || gameStore.currentSession?.streamerUsername || 'streamer'"
-      :verification-code="gameStore.currentSession?.verificationCode || '1234'"
-      :is-verified="gameStore.currentSession?.isBroadcasterVerified"
-      @close="showVerifyModal = false"
-    />
-    <ConfirmModal
-      :is-open="confirmModalState.isOpen"
-      :title="confirmModalState.title"
-      :message="confirmModalState.message"
-      :confirm-text="confirmModalState.confirmText"
-      :cancel-text="confirmModalState.cancelText"
-      :variant="confirmModalState.variant"
-      @confirm="handleModalConfirm"
-      @cancel="confirmModalState.isOpen = false"
-      @close="confirmModalState.isOpen = false"
-    />
 
     <!-- Top Master HUD Action Bar (Compact & Space-Optimized) -->
     <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-arena-dark/95 border border-arena-borderLight/80 rounded-2xl shadow-glow-crimson backdrop-blur-xl shrink-0">
@@ -791,6 +921,17 @@ async function handleTriviaCategorySave(config: { categories: string[]; totalQue
         >
           <span>⚙️</span>
           <span class="hidden sm:inline">{{ t('gameSettingsBtn') }}</span>
+        </button>
+
+        <!-- End Current Game -->
+        <button
+          type="button"
+          class="px-2.5 py-1 bg-rose-950/80 hover:bg-rose-900 border border-rose-600/70 text-xs font-cairo font-bold text-rose-300 hover:text-white rounded-full transition-all flex items-center gap-1 shadow-sm cursor-pointer"
+          :title="isRtl ? 'إنهاء اللعبة الحالية وعرض لوحة النتائج' : 'End match & show final scoreboard'"
+          @click="promptEndGame"
+        >
+          <span>🛑</span>
+          <span>{{ isRtl ? 'إنهاء اللعبة' : 'End Game' }}</span>
         </button>
 
         <!-- Reset -->
@@ -1013,11 +1154,11 @@ async function handleTriviaCategorySave(config: { categories: string[]; totalQue
           <!-- ================= FLOATING TURN DECISION POPUP MODAL (Fullscreen Backdrop Blur) ================= -->
           <div
             v-if="gameStore.status === 'WAITING_ACTION' && !isSpinning && gameStore.activePlayer"
-            class="fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in"
+            class="fixed inset-0 z-40 flex items-center justify-center p-3 sm:p-5 bg-black/65 backdrop-blur-sm animate-fade-in overflow-y-auto"
           >
-            <div class="relative max-w-md w-full p-5 sm:p-6 bg-arena-dark/98 border-2 border-indigo-500 rounded-3xl shadow-[0_0_40px_rgba(99,102,241,0.4)] text-center space-y-3.5 animate-scale-up">
+            <div class="relative max-w-2xl w-full max-h-[92vh] flex flex-col p-4 sm:p-6 bg-[#0c0f1c]/98 border-2 border-indigo-500/80 rounded-3xl shadow-[0_0_50px_rgba(99,102,241,0.45)] text-center space-y-3.5 animate-scale-up overflow-hidden">
               <!-- Top Indicator Bar -->
-              <div class="flex items-center justify-between border-b border-arena-border/60 pb-2.5">
+              <div class="flex items-center justify-between border-b border-arena-border/60 pb-2.5 shrink-0">
                 <div class="flex items-center gap-2">
                   <span class="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-ping" />
                   <span class="font-cairo font-black text-xs uppercase tracking-wider text-indigo-400">
@@ -1030,19 +1171,19 @@ async function handleTriviaCategorySave(config: { categories: string[]; totalQue
               </div>
 
               <!-- Active Player Avatar & Title -->
-              <div class="flex items-center justify-center gap-3.5 py-1">
+              <div class="flex items-center justify-center gap-3.5 py-0.5 shrink-0">
                 <div class="relative shrink-0">
                   <img
                     :src="gameStore.activePlayer.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${gameStore.activePlayer.username}`"
                     :alt="gameStore.activePlayer.displayName"
-                    class="w-16 h-16 rounded-full border-3 border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.6)] object-cover bg-arena-bg"
+                    class="w-14 h-14 rounded-full border-3 border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.6)] object-cover bg-arena-bg"
                   />
                   <div class="absolute -bottom-1 -right-1 px-1.5 py-0.2 bg-indigo-600 border border-white text-[10px] font-mono font-black text-white rounded-full">
                     #{{ gameStore.activePlayer.number }}
                   </div>
                 </div>
-                <div class="text-right">
-                  <div class="font-cairo font-black text-lg text-white leading-tight">
+                <div :class="isRtl ? 'text-right' : 'text-left'">
+                  <div class="font-cairo font-black text-base sm:text-lg text-white leading-tight">
                     {{ gameStore.activePlayer.displayName }}
                   </div>
                   <div class="text-xs font-mono text-indigo-300">
@@ -1056,75 +1197,252 @@ async function handleTriviaCategorySave(config: { categories: string[]; totalQue
                 </div>
               </div>
 
-              <!-- Decision Instruction Notice -->
-              <div class="p-2.5 bg-indigo-950/70 border border-indigo-500/40 rounded-2xl text-xs font-tajawal text-indigo-200 leading-relaxed">
-                {{ isRtl ? `المتسابق #${gameStore.activePlayer.number} (${gameStore.activePlayer.displayName}) يملك حق القرار الآن عبر شات البث!` : `Contender #${gameStore.activePlayer.number} (${gameStore.activePlayer.displayName}) has execution authority in chat!` }}
-                <div class="text-[11px] font-mono text-amber-300 mt-1 font-bold">
-                  {{ t('chatInstructions') }}
+              <!-- Chat Command Instructions Banner -->
+              <div class="p-2.5 bg-indigo-950/70 border border-indigo-500/40 rounded-2xl text-xs font-tajawal text-indigo-200 leading-relaxed shrink-0">
+                <div>
+                  {{ isRtl ? `المتسابق #${gameStore.activePlayer.number} (${gameStore.activePlayer.displayName}) يملك حق القرار الآن عبر شات البث!` : `Contender #${gameStore.activePlayer.number} (${gameStore.activePlayer.displayName}) has execution authority in chat!` }}
+                </div>
+                <div class="text-[11px] font-mono text-amber-300 mt-0.5 font-bold">
+                  {{ isRtl ? 'طريقة الاستبعاد: اكتب رقم الهدف مباشرة في الشات (مثلاً 5) أو !kill 5 • وللإنعاش: !revive <الرقم>' : 'How to eliminate: Type target number directly in chat (e.g. 5) or !kill 5 • To revive: !revive <number>' }}
                 </div>
               </div>
 
-              <!-- Available Powers Badges -->
-              <div class="flex items-center justify-center gap-2 pt-1">
-                <span class="px-3 py-1 bg-red-950/80 border border-red-500/50 text-red-300 text-xs font-cairo font-bold rounded-full flex items-center gap-1 shadow-sm">
-                  <span>💥</span>
-                  <span>{{ t('eliminateBtn') }}</span>
-                </span>
-                <span
-                  v-if="activePlayerCanRevive"
-                  class="px-3 py-1 bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 text-xs font-cairo font-bold rounded-full flex items-center gap-1 shadow-sm animate-pulse"
-                >
-                  <span>✨</span>
-                  <span>{{ t('reviveBtn') }}</span>
-                </span>
-                <span
-                  v-else-if="activePlayerReviveAlreadyUsed"
-                  class="px-3 py-1 bg-neutral-900 border border-neutral-700 text-neutral-400 text-xs font-cairo rounded-full flex items-center gap-1 opacity-70"
-                >
-                  <span>⚡</span>
-                  <span>{{ t('reviveUsedBadge') }}</span>
-                </span>
-              </div>
-
               <!-- Turn Timer Bar -->
-              <div class="pt-2">
+              <div class="shrink-0">
                 <TurnTimer
                   :duration-seconds="gameStore.turnDuration"
+                  :total-duration-seconds="gameStore.turnDuration"
                   :timer-ends-at="gameStore.timerEndsAt"
                   @timeout="onTimerTimeout"
                 />
               </div>
+
+              <!-- ================= TARGETABLE CANDIDATES DIRECTORY (WHO TO KILL & WHO TO REVIVE) ================= -->
+              <div class="flex-1 min-h-0 overflow-y-auto space-y-3 text-left pr-1 scrollbar-thin" :dir="isRtl ? 'rtl' : 'ltr'">
+                <!-- Section 1: Targetable Alive Players (للإقصاء) -->
+                <div class="space-y-1.5">
+                  <div class="flex items-center justify-between text-xs font-cairo font-bold text-rose-300 px-1">
+                    <span class="flex items-center gap-1.5">
+                      <span>🎯</span>
+                      <span>{{ isRtl ? 'اللاعبون الصامدون المتاحون للاستبعاد (اكتب رقم الهدف مباشرة):' : 'Alive Targets to Eliminate (Type number directly):' }}</span>
+                    </span>
+                    <span class="text-[10px] font-mono text-slate-400">({{ targetableAlivePlayers.length }})</span>
+                  </div>
+
+                  <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <div
+                      v-for="p in targetableAlivePlayers"
+                      :key="p.number"
+                      class="flex items-center justify-between p-2 rounded-xl bg-[#141828] border border-rose-500/40 hover:border-rose-400/80 transition-all group"
+                    >
+                      <div class="flex items-center gap-2 min-w-0">
+                        <span class="px-1.5 py-0.5 rounded-md bg-red-950/80 border border-red-500/60 font-mono font-black text-xs text-rose-300 shrink-0">
+                          #{{ p.number }}
+                        </span>
+                        <img
+                          :src="p.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${p.username}`"
+                          :alt="p.displayName"
+                          class="w-7 h-7 rounded-full border border-rose-500/40 shrink-0"
+                        />
+                        <div class="min-w-0">
+                          <div class="text-xs font-cairo font-bold text-white truncate">
+                            {{ p.displayName }}
+                          </div>
+                          <div class="text-[9px] font-mono text-slate-400 truncate">
+                            @{{ p.username }}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        class="px-2 py-1 rounded-lg bg-red-600/80 hover:bg-red-500 text-white font-cairo font-bold text-[10px] shadow-sm hover:scale-105 active:scale-95 transition-all shrink-0 cursor-pointer"
+                        :title="isRtl ? `استبعاد المتسابق #${p.number}` : `Eliminate #${p.number}`"
+                        @click="eliminatePlayer(p.number)"
+                      >
+                        💥 {{ isRtl ? 'استبعاد' : 'Kill' }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Section 2: Revivable Players (للإنعاش) -->
+                <div v-if="activePlayerCanRevive && revivableTargetPlayers.length > 0" class="space-y-1.5 pt-1 border-t border-arena-border/50">
+                  <div class="flex items-center justify-between text-xs font-cairo font-bold text-amber-300 px-1">
+                    <span class="flex items-center gap-1.5">
+                      <span>✨</span>
+                      <span>{{ isRtl ? 'المستبعدون المتاحون للإنعاش (!revive <الرقم>):' : 'Eliminated Contenders to Revive (!revive <number>):' }}</span>
+                    </span>
+                    <span class="text-[10px] font-mono text-slate-400">({{ revivableTargetPlayers.length }})</span>
+                  </div>
+
+                  <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <div
+                      v-for="p in revivableTargetPlayers"
+                      :key="p.number"
+                      class="flex items-center justify-between p-2 rounded-xl bg-[#141828] border border-amber-500/40 hover:border-amber-400/80 transition-all group"
+                    >
+                      <div class="flex items-center gap-2 min-w-0">
+                        <span class="px-1.5 py-0.5 rounded-md bg-amber-950/80 border border-amber-500/60 font-mono font-black text-xs text-amber-300 shrink-0">
+                          #{{ p.number }}
+                        </span>
+                        <img
+                          :src="p.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${p.username}`"
+                          :alt="p.displayName"
+                          class="w-7 h-7 rounded-full border border-amber-500/40 shrink-0"
+                        />
+                        <div class="min-w-0">
+                          <div class="text-xs font-cairo font-bold text-white truncate">
+                            {{ p.displayName }}
+                          </div>
+                          <div class="text-[9px] font-mono text-slate-400 truncate">
+                            @{{ p.username }}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        class="px-2 py-1 rounded-lg bg-amber-600/90 hover:bg-amber-500 text-slate-950 font-cairo font-black text-[10px] shadow-sm hover:scale-105 active:scale-95 transition-all shrink-0 cursor-pointer"
+                        :title="isRtl ? `إنعاش المتسابق #${p.number}` : `Revive #${p.number}`"
+                        @click="revivePlayer(p.number)"
+                      >
+                        ✨ {{ isRtl ? 'إنعاش' : 'Revive' }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Streamer Manual Pass Action Footer -->
+              <div class="flex items-center justify-between pt-2 border-t border-arena-border/50 text-xs shrink-0">
+                <span class="text-[11px] font-tajawal text-slate-400">
+                  {{ isRtl ? 'يمكن للستريمر النقر على أي متسابق مباشرة أو تخطي الدور:' : 'Streamer can click any player above or skip turn:' }}
+                </span>
+                <button
+                  type="button"
+                  class="px-3.5 py-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-cairo font-bold text-xs transition-colors cursor-pointer"
+                  @click="gameStore.performAction('TIMEOUT_PASS')"
+                >
+                  ⏰ {{ isRtl ? 'تخطي الدور' : 'Skip Turn' }}
+                </button>
+              </div>
             </div>
           </div>
 
-          <!-- ================= VICTORY BANNER POPUP ================= -->
+          <!-- ================= GRAND ROULETTE COMBAT SCOREBOARD MODAL ================= -->
           <div
-            v-if="gameStore.status === 'FINISHED' && gameStore.winner"
-            class="fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in"
+            v-if="gameStore.status === 'FINISHED'"
+            class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in"
           >
-            <div class="relative max-w-md w-full p-6 bg-gradient-to-b from-indigo-950/90 via-arena-dark to-arena-dark border-2 border-indigo-500 rounded-3xl shadow-glow-crimson text-center space-y-3 animate-scale-up">
-              <div class="text-xs font-cairo text-indigo-400 font-bold uppercase tracking-widest">
-                {{ t('championDeclared') }}
+            <div class="relative max-w-xl w-full p-6 bg-gradient-to-b from-indigo-950/95 via-arena-dark to-slate-950 border-2 border-indigo-500/80 rounded-3xl shadow-[0_0_60px_rgba(99,102,241,0.5)] text-center space-y-4 animate-scale-up">
+              <div class="inline-flex items-center gap-2 px-4 py-1 bg-indigo-500/20 text-indigo-300 border border-indigo-400/50 rounded-full text-xs font-cairo font-black uppercase tracking-widest">
+                🏆 {{ isRtl ? 'لوحة الشرف ونتائج المعركة النهائية' : 'ROULETTE COMBAT SCOREBOARD' }}
               </div>
-              <img
-                :src="gameStore.winner.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${gameStore.winner.username}`"
-                class="w-20 h-20 mx-auto rounded-full border-3 border-indigo-400 shadow-glow-crimson"
-              />
-              <div class="font-cairo font-black text-2xl text-white">
-                #{{ gameStore.winner.number }} // {{ gameStore.winner.displayName }}
-              </div>
-              <div class="font-tajawal text-sm text-indigo-200">
-                {{ t('totalKills') }}: <strong class="text-white">{{ gameStore.winner.killsCount || 0 }}</strong> • {{ t('soleSurvivor') }}
-              </div>
-              <GamerButton
-                size="sm"
-                variant="primary"
-                rounded="full"
-                class="mt-2 text-xs"
-                @click="gameStore.performAction('RESET_GAME')"
+
+              <!-- Winner Spotlight Card -->
+              <div
+                v-if="gameStore.winner"
+                class="p-4 bg-gradient-to-r from-indigo-950/80 via-slate-900 to-purple-950/80 rounded-2xl border border-indigo-400/70 flex items-center justify-between gap-3 shadow-glow-crimson"
               >
-                {{ t('resetGameBtn') }}
-              </GamerButton>
+                <div class="flex items-center gap-3 min-w-0">
+                  <div class="relative shrink-0">
+                    <img
+                      :src="gameStore.winner.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${gameStore.winner.username}`"
+                      class="w-14 h-14 rounded-full border-3 border-indigo-400 shadow-glow-crimson"
+                    />
+                    <span class="absolute -top-2.5 -right-2 text-xl animate-bounce">👑</span>
+                  </div>
+                  <div :class="isRtl ? 'text-right' : 'text-left'" class="min-w-0">
+                    <div class="text-[10px] text-indigo-400 font-bold uppercase tracking-wider">
+                      {{ t('championDeclared') }} • {{ t('soleSurvivor') }}
+                    </div>
+                    <div class="text-xl font-black text-white font-cairo truncate">
+                      #{{ gameStore.winner.number }} // {{ gameStore.winner.displayName }}
+                    </div>
+                    <div class="text-xs text-indigo-200/80 font-mono">@{{ gameStore.winner.username }}</div>
+                  </div>
+                </div>
+
+                <div class="text-right font-mono shrink-0">
+                  <span class="px-2.5 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-400/50 font-black text-xs">
+                    🎯 {{ gameStore.winner.killsCount || 0 }} {{ t('totalKills') }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- No Specific Winner Spotlight Card -->
+              <div
+                v-else
+                class="p-4 bg-slate-900/80 rounded-2xl border border-slate-700 text-slate-300 font-cairo font-bold text-center"
+              >
+                🛑 {{ isRtl ? 'انتهت الجولة بقرار الستريمر' : 'Match ended by Streamer' }}
+              </div>
+
+              <!-- Full Combat Rankings Table -->
+              <div class="space-y-1.5" :class="isRtl ? 'text-right' : 'text-left'">
+                <div class="flex items-center justify-between text-xs font-cairo font-bold text-indigo-300 px-1">
+                  <span>📊 {{ isRtl ? 'ترتيب المتسابقين حسب البقاء والقتلات:' : 'Contenders Leaderboard & Kills:' }}</span>
+                  <span class="text-[10px] font-mono text-slate-400">{{ rankedRoulettePlayers.length }} {{ isRtl ? 'لاعب' : 'players' }}</span>
+                </div>
+
+                <div class="max-h-52 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin">
+                  <template v-for="(p, idx) in rankedRoulettePlayers" :key="p.username">
+                    <div
+                      class="flex items-center justify-between px-3 py-2 rounded-xl border text-xs transition-all"
+                      :class="[
+                        idx === 0 ? 'bg-indigo-950/70 border-indigo-400 text-white font-bold shadow-[0_0_15px_rgba(99,102,241,0.3)]' :
+                        idx === 1 ? 'bg-slate-800/80 border-slate-600 text-slate-200' :
+                        idx === 2 ? 'bg-indigo-950/30 border-indigo-800 text-indigo-200' :
+                        'bg-slate-950/60 border-slate-800 text-slate-400'
+                      ]"
+                    >
+                      <div class="flex items-center gap-2.5 min-w-0">
+                        <span class="font-mono font-bold text-xs shrink-0" :class="idx < 3 ? 'text-indigo-400' : 'text-slate-500'">
+                          {{ idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}` }}
+                        </span>
+                        <img
+                          :src="p.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${p.username}`"
+                          class="w-7 h-7 rounded-full border shrink-0"
+                          :class="p.status === 'ALIVE' || p.status === 'REVIVED' ? 'border-indigo-400' : 'border-red-900/60 grayscale'"
+                        />
+                        <div class="min-w-0">
+                          <div class="font-cairo font-bold text-white truncate flex items-center gap-1.5">
+                            <span>#{{ p.number }}</span>
+                            <span class="truncate">{{ p.displayName }}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="flex items-center gap-2 font-mono shrink-0">
+                        <span class="text-[10px] text-indigo-300 font-bold">
+                          🎯 {{ p.killsCount || 0 }}
+                        </span>
+                        <span
+                          class="px-2 py-0.5 rounded text-[9px] font-bold uppercase border"
+                          :class="p.status === 'ALIVE' || p.status === 'REVIVED'
+                            ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50'
+                            : 'bg-red-950 text-red-400 border-red-500/50'"
+                        >
+                          {{ p.status === 'ALIVE' || p.status === 'REVIVED' ? (isRtl ? 'صامد 🏆' : 'ALIVE 🏆') : (isRtl ? 'مستبعد 💀' : 'OUT 💀') }}
+                        </span>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+
+              <div class="pt-2 flex justify-center gap-3">
+                <GamerButton
+                  size="md"
+                  variant="primary"
+                  rounded="full"
+                  class="px-8 py-2.5 text-xs font-black shadow-glow-crimson !bg-gradient-to-r !from-indigo-600 !to-purple-600"
+                  @click="gameStore.performAction('RESET_GAME')"
+                >
+                  🔄 {{ t('resetGameBtn') }}
+                </GamerButton>
+              </div>
             </div>
           </div>
         </div>
@@ -1331,6 +1649,174 @@ async function handleTriviaCategorySave(config: { categories: string[]; totalQue
             </div>
           </GamerCard>
 
+          <!-- Subway Runner Roster -->
+          <GamerCard
+            v-else-if="gameStore.currentSession?.gameType === 'SUBWAY_RUNNER'"
+            :title="isRtl ? `متسابقو الهروب السريع (${subwayContenders.filter((c) => c.status === 'ALIVE').length}/${subwayContenders.length})` : `Subway Runners (${subwayContenders.filter((c) => c.status === 'ALIVE').length}/${subwayContenders.length})`"
+            :subtitle="isRtl ? 'قلوب المتسابقين وتفادي العقبات' : 'Contender hearts, lives & reaction stats'"
+          >
+            <div class="space-y-3">
+              <!-- Filter Tabs: All, Alive, Eliminated (NO Revive/Kill!) -->
+              <div class="flex items-center gap-1.5 p-1 bg-arena-dark rounded-xl border border-arena-border/60 text-xs font-cairo font-bold">
+                <button
+                  type="button"
+                  class="flex-1 py-1 px-2 rounded-lg transition-all cursor-pointer"
+                  :class="activeSubwayFilter === 'ALL' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' : 'text-slate-400 hover:text-white'"
+                  @click="activeSubwayFilter = 'ALL'"
+                >
+                  {{ isRtl ? 'الكل' : 'All' }} ({{ subwayContenders.length }})
+                </button>
+                <button
+                  type="button"
+                  class="flex-1 py-1 px-2 rounded-lg transition-all cursor-pointer"
+                  :class="activeSubwayFilter === 'ALIVE' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'text-slate-400 hover:text-white'"
+                  @click="activeSubwayFilter = 'ALIVE'"
+                >
+                  {{ isRtl ? 'صامدون' : 'Alive' }} ({{ subwayContenders.filter((c) => c.status === 'ALIVE').length }})
+                </button>
+                <button
+                  type="button"
+                  class="flex-1 py-1 px-2 rounded-lg transition-all cursor-pointer"
+                  :class="activeSubwayFilter === 'ELIMINATED' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : 'text-slate-400 hover:text-white'"
+                  @click="activeSubwayFilter = 'ELIMINATED'"
+                >
+                  {{ isRtl ? 'مستبعدون' : 'Eliminated' }} 💀 ({{ subwayContenders.filter((c) => c.status === 'ELIMINATED').length }})
+                </button>
+              </div>
+
+              <!-- List of Contenders -->
+              <div class="space-y-2 max-h-[calc(100vh-270px)] overflow-y-auto pr-1">
+                <template v-for="c in filteredSubwayContenders" :key="c.username">
+                  <div
+                    class="flex items-center justify-between p-2.5 rounded-2xl border transition-all"
+                    :class="[
+                      c.status === 'ALIVE'
+                        ? 'bg-arena-card hover:bg-cyan-950/30 border-arena-border/80 hover:border-cyan-500/40'
+                        : 'bg-rose-950/20 border-rose-900/40 opacity-70'
+                    ]"
+                  >
+                    <div class="flex items-center gap-2.5 min-w-0">
+                      <span class="font-mono text-xs font-bold text-cyan-400 w-5">#{{ c.number }}</span>
+                      <img
+                        :src="c.avatarUrl"
+                        class="w-8 h-8 rounded-full border shrink-0"
+                        :class="c.status === 'ALIVE' ? 'border-cyan-400/50' : 'border-rose-700/50 grayscale'"
+                      />
+                      <div class="min-w-0">
+                        <div class="font-cairo font-bold text-xs text-white truncate flex items-center gap-1.5">
+                          <span>{{ c.displayName }}</span>
+                          <span
+                            class="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase border"
+                            :class="c.status === 'ALIVE' ? 'bg-emerald-950 text-emerald-300 border-emerald-500/50' : 'bg-red-950 text-red-400 border-red-500/50'"
+                          >
+                            {{ c.status === 'ALIVE' ? (isRtl ? 'صامد' : 'ALIVE') : (isRtl ? 'مستبعد' : 'OUT') }}
+                          </span>
+                        </div>
+                        <div class="flex items-center gap-1 mt-0.5">
+                          <span v-for="h in 3" :key="h" class="text-xs">
+                            {{ h <= c.hearts ? '❤️' : '🖤' }}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                      <div class="text-right">
+                        <div class="text-[10px] font-bold text-cyan-300 font-mono">
+                          {{ c.successfulDodges }} {{ isRtl ? 'تفادي' : 'dodges' }}
+                        </div>
+                        <div class="text-[9px] text-slate-400 font-mono">
+                          {{ c.score }} {{ isRtl ? 'نقطة' : 'pts' }}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        class="w-6 h-6 rounded-full bg-red-950/60 hover:bg-red-800 text-red-400 hover:text-white flex items-center justify-center text-xs transition-colors"
+                        title="Kick"
+                        @click="kickPlayer(c.number)"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                </template>
+
+                <div v-if="filteredSubwayContenders.length === 0" class="text-center py-6 space-y-2">
+                  <div class="text-xs font-tajawal text-arena-textMuted">{{ t('emptyLobbyMsg') }}</div>
+                  <GamerButton size="sm" variant="secondary" rounded="full" class="text-xs" @click="populateMockContenders(6)">
+                    {{ t('autoFillBtn') }}
+                  </GamerButton>
+                </div>
+              </div>
+            </div>
+          </GamerCard>
+
+          <!-- Hot Potato Roster -->
+          <GamerCard
+            v-else-if="gameStore.currentSession?.gameType === 'HOT_POTATO'"
+            :title="isRtl ? `متسابقو القنبلة الموقوتة (${gameStore.alivePlayers.length}/${gameStore.players.length})` : `Hot Potato Contenders (${gameStore.alivePlayers.length}/${gameStore.players.length})`"
+            :subtitle="isRtl ? 'حامل القنبلة الحالي والناجون' : 'Current bomb holder & surviving players'"
+          >
+            <div class="space-y-2 max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
+              <template v-for="(p, index) in gameStore.players" :key="p.username">
+                <div
+                  class="flex items-center justify-between p-2.5 rounded-2xl border transition-all"
+                  :class="[
+                    p.username.toLowerCase() === gameStore.currentSession?.hotPotatoState?.currentHolderUsername?.toLowerCase()
+                      ? 'bg-gradient-to-r from-red-950/80 to-amber-950/80 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.5)] animate-pulse'
+                      : p.status === 'ALIVE'
+                        ? 'bg-arena-card hover:bg-red-950/30 border-arena-border/80'
+                        : 'bg-red-950/20 border-red-900/40 opacity-60'
+                  ]"
+                >
+                  <div class="flex items-center gap-2.5 min-w-0">
+                    <span class="font-mono text-xs font-bold text-red-400 w-5">#{{ index + 1 }}</span>
+                    <img
+                      :src="p.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${p.username}`"
+                      class="w-8 h-8 rounded-full border border-red-400/50 shrink-0"
+                    />
+                    <div class="min-w-0">
+                      <div class="font-cairo font-bold text-xs text-white truncate flex items-center gap-1.5">
+                        <span>{{ p.displayName }}</span>
+                        <span
+                          v-if="p.username.toLowerCase() === gameStore.currentSession?.hotPotatoState?.currentHolderUsername?.toLowerCase()"
+                          class="px-1.5 py-0.5 rounded bg-red-600 text-white font-black text-[9px] animate-bounce"
+                        >
+                          💣 {{ isRtl ? 'معه القنبلة!' : 'HOLDING BOMB' }}
+                        </span>
+                      </div>
+                      <div class="text-[10px] font-tajawal text-slate-400 font-mono">@{{ p.username }}</div>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="px-2 py-0.5 rounded-lg font-mono font-bold text-[10px] border"
+                      :class="p.status === 'ALIVE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-red-950/80 text-red-400 border-red-500/50'"
+                    >
+                      {{ p.status === 'ALIVE' ? (isRtl ? 'صامد' : 'ALIVE') : (isRtl ? 'انفجر 💥' : 'BLASTED 💥') }}
+                    </span>
+                    <button
+                      type="button"
+                      class="w-6 h-6 rounded-full bg-red-950/60 hover:bg-red-800 text-red-400 hover:text-white flex items-center justify-center text-xs transition-colors"
+                      title="Kick"
+                      @click="kickPlayer(p.number)"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              </template>
+
+              <div v-if="gameStore.players.length === 0" class="text-center py-6 space-y-2">
+                <div class="text-xs font-tajawal text-arena-textMuted">{{ t('emptyLobbyMsg') }}</div>
+                <GamerButton size="sm" variant="secondary" rounded="full" class="text-xs" @click="populateMockContenders(6)">
+                  {{ t('autoFillBtn') }}
+                </GamerButton>
+              </div>
+            </div>
+          </GamerCard>
+
           <!-- Roulette Roster -->
           <GamerCard
             v-else
@@ -1431,10 +1917,10 @@ async function handleTriviaCategorySave(config: { categories: string[]; totalQue
 
     <GameSettingsModal
       :is-open="showSettingsModal"
-      :settings="gameStore.currentSession?.settings"
+      :settings="gameStore.currentSession?.settings || { maxPlayers: 30, turnTimeLimitSeconds: 15, allowRevives: true }"
       :game-type="gameStore.currentSession?.gameType"
       @close="showSettingsModal = false"
-      @save="(s) => gameStore.updateSettings(s)"
+      @save="saveGameSettings"
     />
 
     <PlatformConnectModal
@@ -1446,9 +1932,9 @@ async function handleTriviaCategorySave(config: { categories: string[]; totalQue
 
     <ChannelVerifyModal
       :is-open="showVerifyModal"
+      :channel-name="gameStore.currentSession?.streamerUsername || 'streamer'"
       :verification-code="gameStore.currentSession?.verificationCode"
       :is-verified="gameStore.currentSession?.isBroadcasterVerified"
-      :streamer-username="gameStore.currentSession?.streamerUsername"
       @close="showVerifyModal = false"
       @verify="gameStore.performAction('VERIFY_BROADCASTER')"
     />
@@ -1461,7 +1947,8 @@ async function handleTriviaCategorySave(config: { categories: string[]; totalQue
       :cancel-text="confirmModalState.cancelText"
       :variant="confirmModalState.variant"
       @close="confirmModalState.isOpen = false"
-      @confirm="confirmModalState.onConfirm"
+      @cancel="confirmModalState.isOpen = false"
+      @confirm="handleModalConfirm"
     />
   </div>
 </template>

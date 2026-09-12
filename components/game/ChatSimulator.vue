@@ -310,25 +310,25 @@ function sendHotPotatoPass(targetNum?: number) {
           @click="sendQuick(currentWord, 'FastRacer99')"
         >
           <span>⚡</span>
-          <span>كتابة سريعة: [{{ currentWord }}]</span>
+          <span>{{ isRtl ? `كتابة سريعة: [${currentWord}]` : `Fast Type: [${currentWord}]` }}</span>
         </button>
 
         <button
           type="button"
           class="px-3 py-1.5 text-xs font-cairo font-bold bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-500/40 rounded-full transition-all flex items-center gap-1 shadow-sm"
-          @click="sendQuick('فورتنايت', 'Fahad_Pro')"
+          @click="sendQuick(isRtl ? 'فورتنايت' : 'fortnite', 'Fahad_Pro')"
         >
           <span>⌨️</span>
-          <span>فورتنايت</span>
+          <span>{{ isRtl ? 'فورتنايت' : 'fortnite' }}</span>
         </button>
 
         <button
           type="button"
           class="px-3 py-1.5 text-xs font-cairo font-bold bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-500/40 rounded-full transition-all flex items-center gap-1 shadow-sm"
-          @click="sendQuick('كلاش اوف كلانس', 'Sara_VIP')"
+          @click="sendQuick(isRtl ? 'كلاش اوف كلانس' : 'clash of clans', 'Sara_VIP')"
         >
           <span>⌨️</span>
-          <span>كلاش اوف كلانس</span>
+          <span>{{ isRtl ? 'كلاش اوف كلانس' : 'clash of clans' }}</span>
         </button>
       </template>
 
@@ -345,28 +345,28 @@ function sendHotPotatoPass(targetNum?: number) {
         <button
           type="button"
           class="px-3 py-1.5 text-xs font-cairo font-bold bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/40 rounded-full transition-all flex items-center gap-1 shadow-sm"
-          @click="sendQuick('!guess ماينكرافت', 'SmartGuesser1')"
+          @click="sendQuick(isRtl ? '!guess ماينكرافت' : '!guess minecraft', 'SmartGuesser1')"
         >
           <span>🕵️</span>
-          <span>!guess ماينكرافت</span>
+          <span>{{ isRtl ? '!guess ماينكرافت' : '!guess minecraft' }}</span>
         </button>
 
         <button
           type="button"
           class="px-3 py-1.5 text-xs font-cairo font-bold bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/40 rounded-full transition-all flex items-center gap-1 shadow-sm"
-          @click="sendQuick('!guess ون بيس', 'AnimeFan')"
+          @click="sendQuick(isRtl ? '!guess ون بيس' : '!guess onepiece', 'AnimeFan')"
         >
           <span>🕵️</span>
-          <span>!guess ون بيس</span>
+          <span>{{ isRtl ? '!guess ون بيس' : '!guess onepiece' }}</span>
         </button>
 
         <button
           type="button"
           class="px-3 py-1.5 text-xs font-cairo font-bold bg-teal-950/80 hover:bg-teal-900 text-teal-300 border border-teal-500/40 rounded-full transition-all flex items-center gap-1 shadow-sm"
-          @click="sendQuick('!تخمين فورتنايت', 'GamerOmar')"
+          @click="sendQuick(isRtl ? '!تخمين فورتنايت' : '!guess fortnite', 'GamerOmar')"
         >
           <span>🟩</span>
-          <span>!تخمين فورتنايت</span>
+          <span>{{ isRtl ? '!تخمين فورتنايت' : '!guess fortnite' }}</span>
         </button>
       </template>
 
@@ -386,7 +386,7 @@ function sendHotPotatoPass(targetNum?: number) {
           @click="sendHotPotatoPass()"
         >
           <span>🎲</span>
-          <span>رمي عشوائي (!pass)</span>
+          <span>{{ isRtl ? 'رمي عشوائي (!pass)' : 'Random pass (!pass)' }}</span>
         </button>
 
         <button
@@ -395,7 +395,7 @@ function sendHotPotatoPass(targetNum?: number) {
           @click="sendHotPotatoPass(2)"
         >
           <span>💣</span>
-          <span>تمرير للاعب 2 (!pass 2)</span>
+          <span>{{ isRtl ? 'تمرير للاعب 2 (!pass 2)' : 'Pass to player 2 (!pass 2)' }}</span>
         </button>
 
         <button
@@ -404,7 +404,7 @@ function sendHotPotatoPass(targetNum?: number) {
           @click="sendHotPotatoPass(3)"
         >
           <span>💣</span>
-          <span>تمرير للاعب 3 (!pass 3)</span>
+          <span>{{ isRtl ? 'تمرير للاعب 3 (!pass 3)' : 'Pass to player 3 (!pass 3)' }}</span>
         </button>
       </template>
 
@@ -424,7 +424,7 @@ function sendHotPotatoPass(targetNum?: number) {
           @click="sendQuick('jump', 'Speedy_Ahmed')"
         >
           <span>⬆️</span>
-          <span>قفز (jump)</span>
+          <span>{{ isRtl ? 'قفز (jump)' : 'Jump' }}</span>
         </button>
 
         <button
@@ -433,7 +433,7 @@ function sendHotPotatoPass(targetNum?: number) {
           @click="sendQuick('duck', 'ProGamer')"
         >
           <span>⬇️</span>
-          <span>انزل (duck)</span>
+          <span>{{ isRtl ? 'انزل (duck)' : 'Duck' }}</span>
         </button>
 
         <button
@@ -442,7 +442,7 @@ function sendHotPotatoPass(targetNum?: number) {
           @click="sendQuick('left', 'Sara_VIP')"
         >
           <span>⬅️</span>
-          <span>يسار (left)</span>
+          <span>{{ isRtl ? 'يسار (left)' : 'Left' }}</span>
         </button>
 
         <button
@@ -451,7 +451,7 @@ function sendHotPotatoPass(targetNum?: number) {
           @click="sendQuick('right', 'Tariq_Twitch')"
         >
           <span>➡️</span>
-          <span>يمين (right)</span>
+          <span>{{ isRtl ? 'يمين (right)' : 'Right' }}</span>
         </button>
       </template>
 
@@ -463,6 +463,16 @@ function sendHotPotatoPass(targetNum?: number) {
           @click="$emit('populateMockPlayers', 6)"
         >
           {{ t('autoFillBtn') }}
+        </button>
+
+        <button
+          v-if="activePlayerNumber"
+          type="button"
+          class="px-3.5 py-1.5 text-xs font-cairo font-bold bg-rose-600 hover:bg-rose-500 text-white border border-rose-400 rounded-full transition-all shadow-[0_0_12px_rgba(225,29,72,0.4)] flex items-center gap-1 cursor-pointer"
+          @click="sendQuick('1')"
+        >
+          <span>⚡</span>
+          <span>{{ isRtl ? 'قتل مباشر بالرقم فقط (1)' : 'Direct Kill by # Only (1)' }}</span>
         </button>
 
         <button

@@ -51,6 +51,8 @@ export const useGameStore = defineStore('game', () => {
   });
   const winner = computed(() => currentSession.value?.winner || null);
   const status = computed(() => currentSession.value?.status || 'LOBBY');
+  const turnDuration = computed(() => currentSession.value?.turnDuration ?? currentSession.value?.settings?.turnTimeLimitSeconds ?? 15);
+  const timerEndsAt = computed(() => currentSession.value?.timerEndsAt || null);
 
   // Watch for session changes and persist to localStorage
   watch(
@@ -65,13 +67,22 @@ export const useGameStore = defineStore('game', () => {
     loading.value = true;
     error.value = null;
     try {
+      const savedChannel = typeof window !== 'undefined'
+        ? (localStorage.getItem('chatwar_streamer_channel') || localStorage.getItem('twitch_channel') || '')
+        : '';
+      const finalChannel = streamerUsername || savedChannel || 'streamer';
+
       const res = await $fetch<{ success: boolean; session: IGameSession }>('/api/games/create', {
         method: 'POST',
-        body: { gameType, streamerUsername }
+        body: { gameType, streamerUsername: finalChannel }
       });
       if (res.success && res.session) {
         currentSession.value = res.session;
         saveToLocalStorage(res.session);
+        if (finalChannel && finalChannel !== 'streamer' && typeof window !== 'undefined') {
+          localStorage.setItem('chatwar_streamer_channel', finalChannel);
+          localStorage.setItem('twitch_channel', finalChannel);
+        }
         return res.session;
       }
     } catch (e: any) {
@@ -97,6 +108,10 @@ export const useGameStore = defineStore('game', () => {
       if (res.success && res.session) {
         currentSession.value = res.session;
         saveToLocalStorage(res.session);
+        if (res.session.streamerUsername && res.session.streamerUsername !== 'streamer' && typeof window !== 'undefined') {
+          localStorage.setItem('chatwar_streamer_channel', res.session.streamerUsername);
+          localStorage.setItem('twitch_channel', res.session.streamerUsername);
+        }
       }
     } catch (e: any) {
       // If server doesn't have the session in memory, restore it from local storage
@@ -198,6 +213,11 @@ export const useGameStore = defineStore('game', () => {
     clearStoredSession();
   }
 
+  async function updateSettings(newSettings: Partial<IGameSettings>) {
+    if (!currentSession.value) return false;
+    return await performAction('UPDATE_SETTINGS', { settings: newSettings });
+  }
+
   return {
     currentSession,
     loading,
@@ -210,6 +230,8 @@ export const useGameStore = defineStore('game', () => {
     targetPlayer,
     winner,
     status,
+    turnDuration,
+    timerEndsAt,
     createNewSession,
     loadSession,
     performAction,
@@ -217,6 +239,7 @@ export const useGameStore = defineStore('game', () => {
     setSessionDirectly,
     clearStoredSession,
     deleteCurrentSession,
+    updateSettings,
     getFromLocalStorage
   };
 });

@@ -237,7 +237,7 @@ export async function createGameSession(
       : null,
     boardPartyState: isBoardParty ? createInitialBoardPartyState(5) : null,
     gridRoyaleState: isGridRoyale ? createInitialGridRoyaleState(1, 10) : null,
-    typeRaceState: isTypeRace ? createInitialTypeRaceState(3, 7, 15, 'AR') : null,
+    typeRaceState: isTypeRace ? createInitialTypeRaceState(0, 7, 15, 'AR') : null,
     hangmanState: isHangman ? createInitialHangmanState(60, 5) : null,
     hotPotatoState: isHotPotato ? createInitialHotPotatoState() : null,
     subwayRunnerState: isSubwayRunner ? createInitialSubwayRunnerState() : null,
@@ -576,7 +576,94 @@ export async function processGameAction(
       break;
     }
 
+    case 'END_GAME': {
+      session.status = 'FINISHED';
+      session.timerEndsAt = null;
+
+      // Handle game-specific end state so their scoreboards activate
+      if (session.gameType === 'SUBWAY_RUNNER' && session.subwayRunnerState) {
+        session.subwayRunnerState.status = 'MATCH_OVER';
+        const all = Object.values(session.subwayRunnerState.contenders || {});
+        const sorted = all.sort((a, b) => {
+          if (a.status === 'ALIVE' && b.status !== 'ALIVE') return -1;
+          if (a.status !== 'ALIVE' && b.status === 'ALIVE') return 1;
+          return (b.score || 0) - (a.score || 0);
+        });
+        if (sorted.length > 0) {
+          const top = sorted[0];
+          session.subwayRunnerState.winner = {
+            id: `p_${top.username}`,
+            number: 1,
+            username: top.username,
+            displayName: top.displayName,
+            avatarUrl: top.avatarUrl,
+            status: top.status,
+            revivesUsed: 0,
+            timesRevived: 0,
+            killsCount: 0,
+            score: top.score,
+            successfulDodges: top.successfulDodges,
+            joinedAt: new Date().toISOString()
+          };
+          session.winner = session.subwayRunnerState.winner;
+        }
+      } else if (session.gameType === 'HOT_POTATO' && session.hotPotatoState) {
+        session.hotPotatoState.status = 'MATCH_OVER';
+        const alive = session.players.filter((p) => p.status === 'ALIVE' || p.status === 'REVIVED');
+        const winnerPlayer = alive[0] || session.players[0] || null;
+        if (winnerPlayer) {
+          session.hotPotatoState.winner = winnerPlayer;
+          session.winner = winnerPlayer;
+        }
+      } else if (session.gameType === 'TYPE_RACE' && session.typeRaceState) {
+        session.typeRaceState.status = 'MATCH_OVER';
+        const sorted = [...session.players].sort((a, b) => (b.score || 0) - (a.score || 0));
+        if (sorted.length > 0) {
+          session.typeRaceState.winner = sorted[0];
+          session.winner = sorted[0];
+        }
+      } else if (session.gameType === 'HANGMAN' && session.hangmanState) {
+        session.hangmanState.status = 'MATCH_OVER';
+        const sorted = [...session.players].sort((a, b) => (b.score || 0) - (a.score || 0));
+        if (sorted.length > 0) {
+          session.hangmanState.winner = sorted[0];
+          session.winner = sorted[0];
+        }
+      } else if (session.gameType === 'GRID_ROYALE' && session.gridRoyaleState) {
+        session.gridRoyaleState.status = 'MATCH_OVER';
+        const alive = session.players.filter((p) => p.status === 'ALIVE' || p.status === 'REVIVED');
+        const winnerPlayer = alive[0] || session.players[0] || null;
+        if (winnerPlayer) {
+          session.gridRoyaleState.winner = winnerPlayer;
+          session.winner = winnerPlayer;
+        }
+      } else if (session.gameType === 'TRIVIA' && session.triviaState) {
+        session.triviaState.status = 'ROUND_SUMMARY';
+        const sorted = [...session.players].sort((a, b) => (b.score || 0) - (a.score || 0));
+        if (sorted.length > 0) {
+          session.winner = sorted[0];
+        }
+      } else if (session.gameType === 'BOARD_PARTY' && session.boardPartyState) {
+        session.boardPartyState.status = 'MATCH_OVER';
+      } else if (session.gameType === 'ROULETTE') {
+        if (!session.winner && session.players.length > 0) {
+          session.winner = session.players.find((p) => p.status === 'ALIVE') || session.players[0];
+        }
+      }
+
+      session.logs.unshift({
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: 'WIN',
+        message: '🛑 قام الستريمر بإنهاء اللعبة الحالية وعرض لوحة النتائج النهائية.'
+      });
+      break;
+    }
+
     case 'UPDATE_SETTINGS': {
+      if (payload.streamerUsername) {
+        session.streamerUsername = payload.streamerUsername.trim();
+      }
       if (settings) {
         session.settings = { ...session.settings, ...settings };
         session.logs.unshift({
@@ -1339,20 +1426,22 @@ export async function processGameAction(
       const rounds = payload.totalRounds || session.settings.typeRaceTotalRounds || 7;
       session.settings.typeRaceLanguage = lang;
       session.settings.typeRaceTotalRounds = rounds;
-      if (!session.typeRaceState) {
-        session.typeRaceState = createInitialTypeRaceState(
-          session.settings.typeRaceTargetScore || 3,
-          rounds,
-          session.settings.typeRaceTimeLimitSeconds || 15,
-          lang
-        );
-      } else {
-        session.typeRaceState.languageMode = lang;
-        session.typeRaceState.totalRounds = rounds;
-      }
+      const timeLimit = session.settings.typeRaceTimeLimitSeconds || 15;
+
+      // Cleanly re-initialize with exact configured rounds and no targetScore cutoff
+      session.typeRaceState = createInitialTypeRaceState(
+        0,
+        rounds,
+        timeLimit,
+        lang
+      );
+      session.winner = null;
+      session.players.forEach((p) => {
+        p.score = 0;
+        p.killsCount = 0;
+      });
 
       startTypeRaceRound(session.typeRaceState, lang);
-      const timeLimit = session.settings.typeRaceTimeLimitSeconds || 15;
       session.status = 'WORD_ACTIVE';
       session.turnDuration = timeLimit;
       session.timerEndsAt = new Date(Date.now() + timeLimit * 1000).toISOString();
@@ -1361,7 +1450,7 @@ export async function processGameAction(
         id: crypto.randomUUID(),
         timestamp: new Date().toISOString(),
         type: 'INFO',
-        message: `⚡ انطلق سباق سرعة الكتابة! الجولة 1: اكتبوا الكلمة [${session.typeRaceState.currentWord}] في الشات بأقصى سرعة! 🔥`
+        message: `⚡ انطلق سباق سرعة الكتابة (${rounds} جولات)! الجولة 1: اكتبوا الكلمة [${session.typeRaceState.currentWord}] في الشات بأقصى سرعة! 🔥`
       });
       break;
     }
@@ -1485,12 +1574,11 @@ export async function processGameAction(
     }
 
     case 'TYPE_RACE_RESTART': {
-      const target = session.settings.typeRaceTargetScore || 3;
       const rounds = session.settings.typeRaceTotalRounds || 7;
       const duration = session.settings.typeRaceTimeLimitSeconds || 15;
       const lang = session.settings.typeRaceLanguage || 'AR';
 
-      session.typeRaceState = createInitialTypeRaceState(target, rounds, duration, lang);
+      session.typeRaceState = createInitialTypeRaceState(0, rounds, duration, lang);
       session.status = 'LOBBY';
       session.timerEndsAt = null;
       session.winner = null;
